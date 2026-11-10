@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/murongg/SubLane/internal/accounts"
+	"github.com/murongg/SubLane/internal/audit"
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/groups"
 	"github.com/murongg/SubLane/internal/storage"
@@ -322,4 +323,52 @@ func assignedFixture(t *testing.T) (*sql.DB, *groups.Service, auth.Member, accou
 		t.Fatal(err)
 	}
 	return conn, service, member, account
+}
+
+func TestPreferenceBoostsStayWithGroupMembership(t *testing.T) {
+	connection, service, _, account := fixture(t)
+	ctx := context.Background()
+	save := func(id int64, name string, ids []string, boosts map[string]int64) groups.Detail {
+		t.Helper()
+		g, err := service.Save(ctx, id, groups.Input{Name: name, Enabled: true, AccountIDs: ids, PreferenceBoosts: boosts})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	first := save(0, "First", []string{account.ID}, map[string]int64{account.ID: 150})
+	second := save(0, "Second", []string{account.ID}, nil)
+	if first.PreferenceBoosts[account.ID] != 150 || second.PreferenceBoosts[account.ID] != 0 {
+		t.Fatal(first, second)
+	}
+	first = save(first.ID, "Renamed", []string{account.ID}, nil)
+	if first.PreferenceBoosts[account.ID] != 150 {
+		t.Fatal("legacy edit erased boost", first)
+	}
+	for _, boosts := range []map[string]int64{{account.ID: -1}, {account.ID: 301}, {"foreign-account": 50}} {
+		if _, err := service.Save(ctx, first.ID, groups.Input{Name: "Invalid", Enabled: true, AccountIDs: []string{account.ID}, PreferenceBoosts: boosts}); !errors.Is(err, groups.ErrInput) {
+			t.Fatal("invalid boost accepted", boosts, err)
+		}
+	}
+	first = save(first.ID, "Renamed", []string{account.ID}, map[string]int64{account.ID: 0})
+	if first.PreferenceBoosts[account.ID] != 0 {
+		t.Fatal("reset failed", first)
+	}
+	save(first.ID, "Renamed", []string{account.ID}, map[string]int64{account.ID: 100})
+	save(first.ID, "Renamed", []string{}, nil)
+	first = save(first.ID, "Renamed", []string{account.ID}, nil)
+	if first.PreferenceBoosts[account.ID] != 0 {
+		t.Fatal("readded membership inherited old boost", first)
+	}
+	if _, err := connection.Exec("CREATE TRIGGER fail_boost_audit BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END"); err != nil {
+		t.Fatal(err)
+	}
+	ctx = audit.WithActor(ctx, audit.Actor{ID: 1, TenantID: 1, Username: "synthetic-admin", Role: "admin", Source: "user"})
+	if _, err := service.Save(ctx, first.ID, groups.Input{Name: "Atomic", Enabled: true, AccountIDs: []string{account.ID}, PreferenceBoosts: map[string]int64{account.ID: 200}}); err == nil {
+		t.Fatal("audit failure did not abort")
+	}
+	actual, err := service.Get(context.Background(), first.ID)
+	if err != nil || actual.Name != "Renamed" || actual.PreferenceBoosts[account.ID] != 0 {
+		t.Fatal("partial save", actual, err)
+	}
 }

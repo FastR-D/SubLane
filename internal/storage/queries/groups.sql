@@ -104,3 +104,10 @@ WHERE id=sqlc.arg(id);
 -- name: GroupHasSubscriptions :one
 SELECT EXISTS(SELECT 1 FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id
 WHERE ga.group_id=sqlc.arg(group_id) AND a.provider!='openai');
+
+-- name: ListGroupPreferenceBoosts :many
+SELECT account_id,preference_boost FROM group_accounts WHERE group_id=sqlc.arg(group_id) ORDER BY account_id;
+
+-- name: SetGroupPreferenceBoost :exec
+UPDATE group_accounts SET preference_boost=sqlc.arg(preference_boost)
+WHERE group_id=sqlc.arg(group_id) AND account_id=sqlc.arg(account_id);

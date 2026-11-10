@@ -278,7 +278,7 @@ func configureTestPool(t *testing.T, conn *sql.DB) {
 	t.Helper()
 	for _, statement := range []string{
 		"INSERT OR IGNORE INTO account_groups(id,name,enabled,created_at,updated_at) VALUES(1,'Default',1,1,1)",
-		"INSERT OR IGNORE INTO group_accounts SELECT 1,id FROM accounts",
+		"INSERT OR IGNORE INTO group_accounts(group_id,account_id) SELECT 1,id FROM accounts",
 		"INSERT OR IGNORE INTO group_members SELECT 1,id FROM users",
 	} {
 		if _, err := conn.Exec(statement); err != nil {

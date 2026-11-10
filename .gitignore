@@ -28,3 +28,5 @@ credentials.key
 *.sublane-backup.tar.gz
 .sublane-backup-*/
 restore-ready/
+
+/doc

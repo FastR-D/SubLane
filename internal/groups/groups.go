@@ -43,6 +43,7 @@ type Group struct {
 	MemberCount  int64 `json:"member_count"`
 }
 type Detail struct {
+	PreferenceBoosts map[string]int64 `json:"preference_boosts"`
 	Group
 	Resources     []Resource `json:"resources"`
 	AccountIDs    []string   `json:"account_ids"`
@@ -60,12 +61,13 @@ type Member struct {
 	Username string `json:"username"`
 }
 type Input struct {
-	Resources   []Resource   `json:"resources"`
-	Routing     *Routing     `json:"routing,omitempty"`
-	ModelPolicy *ModelPolicy `json:"model_policy,omitempty"`
-	Name        string       `json:"name"`
-	Enabled     bool         `json:"enabled"`
-	AccountIDs  []string     `json:"account_ids"`
+	PreferenceBoosts map[string]int64 `json:"preference_boosts,omitempty"`
+	Resources        []Resource       `json:"resources"`
+	Routing          *Routing         `json:"routing,omitempty"`
+	ModelPolicy      *ModelPolicy     `json:"model_policy,omitempty"`
+	Name             string           `json:"name"`
+	Enabled          bool             `json:"enabled"`
+	AccountIDs       []string         `json:"account_ids"`
 }
 type Service struct {
 	connection *sql.DB
@@ -126,6 +128,14 @@ func (s *Service) Get(ctx context.Context, id int64) (Detail, error) {
 		} else {
 			result.SubscriptionCount++
 		}
+	}
+	boosts, err := q.ListGroupPreferenceBoosts(ctx, id)
+	if err != nil {
+		return Detail{}, err
+	}
+	result.PreferenceBoosts = make(map[string]int64, len(boosts))
+	for _, boost := range boosts {
+		result.PreferenceBoosts[boost.AccountID] = boost.PreferenceBoost
 	}
 	result.AllowedModels, err = q.ListGroupModels(ctx, id)
 	if err != nil {
@@ -200,6 +210,22 @@ func (s *Service) Save(ctx context.Context, id int64, input Input) (Detail, erro
 			}
 		}
 	}
+	for accountID, boost := range input.PreferenceBoosts {
+		if !seen[accountID] || boost < 0 || boost > 300 {
+			return Detail{}, ErrInput
+		}
+	}
+	previousBoosts, err := q.ListGroupPreferenceBoosts(ctx, id)
+	if err != nil {
+		return Detail{}, err
+	}
+	boosts := make(map[string]int64, len(previousBoosts))
+	for _, previous := range previousBoosts {
+		boosts[previous.AccountID] = previous.PreferenceBoost
+	}
+	for accountID, boost := range input.PreferenceBoosts {
+		boosts[accountID] = boost
+	}
 	now := time.Now().Unix()
 	if id == 0 {
 		count, err := q.CountGroups(ctx, s.tenantID)
@@ -243,6 +269,12 @@ func (s *Service) Save(ctx context.Context, id int64, input Input) (Detail, erro
 				}
 				return Detail{}, err
 			}
+		}
+	}
+	// Retained relations keep boosts when older clients omit the optional map.
+	for _, accountID := range input.AccountIDs {
+		if err := q.SetGroupPreferenceBoost(ctx, db.SetGroupPreferenceBoostParams{GroupID: id, AccountID: accountID, PreferenceBoost: boosts[accountID]}); err != nil {
+			return Detail{}, err
 		}
 	}
 	if input.ModelPolicy != nil {

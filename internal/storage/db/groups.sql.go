@@ -358,6 +358,38 @@ func (q *Queries) ListGroupModels(ctx context.Context, groupID int64) ([]string,
 	return items, nil
 }
 
+const listGroupPreferenceBoosts = `-- name: ListGroupPreferenceBoosts :many
+SELECT account_id,preference_boost FROM group_accounts WHERE group_id=?1 ORDER BY account_id
+`
+
+type ListGroupPreferenceBoostsRow struct {
+	AccountID       string
+	PreferenceBoost int64
+}
+
+func (q *Queries) ListGroupPreferenceBoosts(ctx context.Context, groupID int64) ([]ListGroupPreferenceBoostsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listGroupPreferenceBoosts, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGroupPreferenceBoostsRow{}
+	for rows.Next() {
+		var i ListGroupPreferenceBoostsRow
+		if err := rows.Scan(&i.AccountID, &i.PreferenceBoost); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGroups = `-- name: ListGroups :many
 SELECT g.id, g.name, g.enabled, g.created_at, g.updated_at, g.restricted_models, g.tenant_id, g.routing_preference, g.allow_api_fallback, (SELECT count(*) FROM group_accounts a WHERE a.group_id=g.id) AS account_count,
 (SELECT count(*) FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id WHERE ga.group_id=g.id AND a.provider!='openai') AS subscription_count,
@@ -518,6 +550,22 @@ type SetGroupModelPolicyParams struct {
 
 func (q *Queries) SetGroupModelPolicy(ctx context.Context, arg SetGroupModelPolicyParams) error {
 	_, err := q.db.ExecContext(ctx, setGroupModelPolicy, arg.Restricted, arg.ID)
+	return err
+}
+
+const setGroupPreferenceBoost = `-- name: SetGroupPreferenceBoost :exec
+UPDATE group_accounts SET preference_boost=?1
+WHERE group_id=?2 AND account_id=?3
+`
+
+type SetGroupPreferenceBoostParams struct {
+	PreferenceBoost int64
+	GroupID         int64
+	AccountID       string
+}
+
+func (q *Queries) SetGroupPreferenceBoost(ctx context.Context, arg SetGroupPreferenceBoostParams) error {
+	_, err := q.db.ExecContext(ctx, setGroupPreferenceBoost, arg.PreferenceBoost, arg.GroupID, arg.AccountID)
 	return err
 }
 
