@@ -37,6 +37,12 @@ func pruneHistory(ctx context.Context, connection *sql.DB, now time.Time) error 
 	today := now.UTC().Truncate(24 * time.Hour).Unix()
 	prunes := []func(context.Context) (int64, error){
 		func(ctx context.Context) (int64, error) {
+			return q.PruneSchedulingSamples(ctx, db.PruneSchedulingSamplesParams{LongBefore: now.Add(-90 * 24 * time.Hour).Unix(), ShortBefore: now.Add(-7 * 24 * time.Hour).Unix()})
+		},
+		func(ctx context.Context) (int64, error) {
+			return q.PruneSchedulingUsage(ctx, now.Add(-90*24*time.Hour).Unix())
+		},
+		func(ctx context.Context) (int64, error) {
 			return allocations.Prune(ctx, q, now.Add(-90*24*time.Hour).Unix())
 		},
 		func(ctx context.Context) (int64, error) { return q.PruneStatistics(ctx, today-89*86400) },

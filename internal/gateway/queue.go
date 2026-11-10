@@ -28,6 +28,7 @@ func (s *Service) leaseAccount(ctx context.Context, entry *observation, session,
 	var timer *time.Timer
 	var retry *time.Ticker
 	var deadline time.Time
+	var waitedAt time.Time
 	admissionCtx := ctx
 	defer func() {
 		if timer != nil {
@@ -81,6 +82,7 @@ func (s *Service) leaseAccount(ctx context.Context, entry *observation, session,
 				return id, digest, ErrAccountQueueFull
 			}
 			s.waiting[entry.record.GroupID]++
+			waitedAt = time.Now()
 			deadline = time.Now().Add(s.accountWaitTimeout)
 			waitingCtx, stopWaiting := context.WithDeadline(ctx, deadline)
 			defer stopWaiting()
@@ -130,6 +132,9 @@ func (s *Service) leaseAccount(ctx context.Context, entry *observation, session,
 		entry.allocationTracked = true
 	}
 	state := s.health[id]
+	if !waitedAt.IsZero() {
+		entry.waitMS = time.Since(waitedAt).Milliseconds()
+	}
 	state.InFlight++
 	if modelState != nil {
 		modelState.inFlight++

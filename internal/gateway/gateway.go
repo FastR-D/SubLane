@@ -44,6 +44,7 @@ const (
 func (k Kind) IsGemini() bool { return k == Gemini || k == GeminiStream }
 
 type Service struct {
+	scheduling         schedulingCollector
 	telemetry          *metrics.Collector
 	db                 *sql.DB
 	queries            *db.Queries

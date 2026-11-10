@@ -249,6 +249,7 @@ func (s *Service) fetchUsage(id string, e *usageEntry, release func()) {
 	if err == nil {
 		// Publish only after SQLite commits so a restart cannot lose an acknowledged observation.
 		e.snapshot = &value
+		s.recordSchedulingQuota(id, e.revision, value)
 	} else {
 		backoff := 30 * time.Second
 		var upstream *upstream.UpstreamError

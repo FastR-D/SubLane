@@ -59,6 +59,7 @@ func (s *Service) observeUsage(ctx context.Context, id string, revision int64, v
 		return err
 	}
 	e.snapshot, e.err = &saved, nil
+	s.recordSchedulingQuota(id, revision, saved)
 	// Keep the existing polling cooldown: a response is not proof that its own
 	// request has been charged, and must not indefinitely postpone reconciliation.
 	return nil

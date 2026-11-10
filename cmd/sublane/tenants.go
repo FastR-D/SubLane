@@ -146,6 +146,7 @@ func (r *tenantRegistry) acquire(id int64) *tenantRuntime {
 	rules := content.New(r.db, r.vault, id)
 	forwarding.SetContent(rules)
 	forwarding.SetTimeZone(r.timeZone)
+	forwarding.StartScheduling()
 	dataDir := ""
 	var codexVersions *versions.Service
 	var grokVersions *versions.Service

@@ -155,11 +155,19 @@ func (s *Service) candidateWeights(candidates []string, snapshots map[string]db.
 }
 
 type SchedulingPreview struct {
-	AsOf    int64                   `json:"as_of"`
-	Policy  groups.SchedulingPolicy `json:"policy"`
-	Dynamic bool                    `json:"dynamic"`
-	Weights []SchedulingWeight      `json:"weights"`
-	Route   *RouteExplanation       `json:"route"`
+	Resources []SchedulingResource    `json:"resources"`
+	AsOf      int64                   `json:"as_of"`
+	Policy    groups.SchedulingPolicy `json:"policy"`
+	Dynamic   bool                    `json:"dynamic"`
+	Weights   []SchedulingWeight      `json:"weights"`
+	Route     *RouteExplanation       `json:"route"`
+}
+type SchedulingResource struct {
+	AccountID      string `json:"account_id"`
+	State          string `json:"state"`
+	Tier           int    `json:"tier"`
+	InFlight       int64  `json:"in_flight"`
+	MaxConcurrency int64  `json:"max_concurrency"`
 }
 type schedulingPreviewKey struct{}
 

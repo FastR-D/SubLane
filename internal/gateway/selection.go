@@ -64,11 +64,52 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		return "", digest, err
 	}
 	available := make([]accounts.Account, 0, len(rows))
+	preview, _ := ctx.Value(schedulingPreviewKey{}).(*SchedulingPreview)
+	statuses := make(map[string]*SchedulingResource)
+	if preview != nil {
+		preview.Resources = make([]SchedulingResource, 0, len(rows))
+	}
+	mark := func(id string, err error) {
+		if v := statuses[id]; v != nil {
+			switch {
+			case err == nil:
+				v.State = "eligible"
+			case errors.Is(err, ErrAccountBusy):
+				v.State = "busy"
+			case errors.Is(err, ErrAccountCooling), errors.Is(err, ErrModelCooling):
+				v.State = "cooling"
+			case errors.Is(err, ErrQuotaExhausted):
+				v.State = "quota"
+			case errors.Is(err, ErrCatalogUnavailable):
+				v.State = "catalog_unknown"
+			case errors.Is(err, ErrModelUnavailable):
+				v.State = "model"
+			default:
+				v.State = "policy"
+			}
+		}
+	}
 	snapshots := make(map[string]db.ListRoutingAccountsRow, len(rows))
 	for _, row := range rows {
 		available = append(available, accounts.Account{ID: row.ID, Provider: row.Provider, Enabled: row.Enabled, Status: row.Status})
 		snapshots[row.ID] = row
+		if preview != nil {
+			state := s.health[row.ID]
+			v := &SchedulingResource{AccountID: row.ID, State: "policy", Tier: 4}
+			if state != nil {
+				v.InFlight = state.InFlight
+				v.MaxConcurrency = state.MaxConcurrency
+			}
+			statuses[row.ID] = v
+		}
 	}
+	defer func() {
+		if preview != nil {
+			for _, row := range rows {
+				preview.Resources = append(preview.Resources, *statuses[row.ID])
+			}
+		}
+	}()
 	// Catalogs, quota and pool policy share this transaction; no decrypted management metadata is needed.
 	supports := func(id, model, provider string) (bool, bool, error) {
 		row := snapshots[id]
@@ -229,6 +270,9 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	for _, account := range available {
 		if !s.accounts.ProviderEnabled(account.Provider) || !policy.AllowsProvider(account.Provider) || !allowed[account.ID] || !account.Enabled || account.Status == "reauth_required" || (provider != "" && account.Provider != provider) || (kind == Compact && account.Provider != "codex") {
 			if !s.accounts.ProviderEnabled(account.Provider) || !account.Enabled || account.Status == "reauth_required" {
+				if v := statuses[account.ID]; v != nil {
+					v.State = "unavailable"
+				}
 				route.Exclusions.Unavailable = min(maxRouteCount, route.Exclusions.Unavailable+1)
 			} else {
 				route.Exclusions.Policy = min(maxRouteCount, route.Exclusions.Policy+1)
@@ -246,16 +290,19 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 				return "", digest, err
 			}
 			if !known {
+				mark(account.ID, ErrCatalogUnavailable)
 				route.Exclusions.Model = min(maxRouteCount, route.Exclusions.Model+1)
 				unknown = true
 				continue
 			}
 			if !supported {
+				mark(account.ID, ErrModelUnavailable)
 				route.Exclusions.Model = min(maxRouteCount, route.Exclusions.Model+1)
 				continue
 			}
 		}
 		if err := s.accountAdmission(account); err != nil {
+			mark(account.ID, err)
 			route.Exclusions.reject(err)
 			if errors.Is(err, ErrAccountBusy) {
 				busy = true
@@ -268,6 +315,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 			continue
 		}
 		if err := quotaAdmission(account, model); err != nil {
+			mark(account.ID, err)
 			route.Exclusions.reject(err)
 			var quota *QuotaError
 			if !errors.As(err, &quota) {
@@ -279,6 +327,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 			continue
 		}
 		if err := s.modelAdmission(ctx, q, account.ID, model); err != nil {
+			mark(account.ID, err)
 			route.Exclusions.reject(err)
 			if errors.Is(err, ErrAccountBusy) {
 				busy = true
@@ -307,6 +356,10 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		// Preference only ranks accounts that passed every policy and availability check.
 		// Existing affinities returned above must never move to a more direct provider.
 		rank := policy.Routing.Rank(account.Provider, preferred)
+		mark(account.ID, nil)
+		if v := statuses[account.ID]; v != nil {
+			v.Tier = rank
+		}
 		// Parent metadata is only a preference among admitted accounts, never a binding or permission grant.
 		if account.ID == parentAccount {
 			rank = -1
@@ -317,6 +370,11 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		}
 		if rank == bestRank {
 			candidates = append(candidates, account.ID)
+		}
+	}
+	for _, v := range statuses {
+		if v.State == "eligible" && v.Tier > bestRank {
+			v.State = "lower_tier"
 		}
 	}
 	if len(candidates) == 0 {
@@ -379,6 +437,9 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	}
 	if err := tx.Commit(); err != nil {
 		return "", digest, err
+	}
+	if id != parentAccount {
+		s.recordSchedulingPlacement(groupID, cursor, schedulingPolicy.Revision, id, details)
 	}
 	return id, digest, nil
 }

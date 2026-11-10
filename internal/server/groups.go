@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/murongg/SubLane/internal/allocations"
@@ -34,6 +35,7 @@ func (h *groupHTTP) register(router chi.Router) {
 	router.Get("/{id}/members", h.poolMembers)
 	router.Get("/{id}/models", h.catalog)
 	router.Get("/{id}/scheduling", h.scheduling)
+	router.Get("/{id}/scheduling/history", h.schedulingHistory)
 	router.Get("/{id}/models/availability", h.availability)
 	router.Patch("/{id}", h.update)
 	router.Get("/members/{id}", h.memberGroups)
@@ -263,4 +265,34 @@ func (h *groupHTTP) schedulingRevisions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, 200, map[string]any{"revisions": values})
+}
+
+func (h *groupHTTP) schedulingHistory(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil || id <= 0 {
+		groupError(w, groups.ErrInput)
+		return
+	}
+	if h.gateway == nil {
+		writeJSON(w, 503, map[string]string{"error": "unavailable"})
+		return
+	}
+	if _, err = h.service.Get(r.Context(), id); err != nil {
+		groupError(w, err)
+		return
+	}
+	hours := int64(24)
+	if raw := r.URL.Query().Get("hours"); raw != "" {
+		hours, err = strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			groupError(w, groups.ErrInput)
+			return
+		}
+	}
+	value, err := h.gateway.SchedulingHistory(r.Context(), sessionUser(r).ID, id, hours, r.URL.Query().Get("account"))
+	if err != nil {
+		gatewayError(w, err)
+		return
+	}
+	writeJSON(w, 200, value)
 }

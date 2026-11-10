@@ -90,6 +90,7 @@ func requestReasoningEffort(input map[string]json.RawMessage, kind Kind) string 
 }
 
 type observation struct {
+	waitMS             int64
 	route              *RouteExplanation
 	kind               Kind
 	service            *Service
@@ -289,6 +290,9 @@ func (s *Service) persistObservation(ctx context.Context, e *observation) error 
 		record.Model = ""
 	}
 	if err := q.RecordRequest(ctx, record); err != nil {
+		return err
+	}
+	if err := s.recordSchedulingUsage(ctx, q, e); err != nil {
 		return err
 	}
 	if err := recordStatistics(ctx, q, record); err != nil {
