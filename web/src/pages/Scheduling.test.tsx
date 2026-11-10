@@ -158,6 +158,9 @@ it('shows current scheduling, preserves drafts on conflicts, and previews withou
     await screen.findByRole('heading', { name: 'Scheduling overview' }),
   ).toBeTruthy()
   expect(await screen.findByText('Synthetic account')).toBeTruthy()
+  expect(
+    await screen.findByText(/Prefer quota approaching its reset: Disabled/),
+  ).toBeTruthy()
   await user.click(screen.getByRole('button', { name: 'Scheduling overview' }))
   await user.click(
     await screen.findByRole('menuitemradio', { name: 'History' }),

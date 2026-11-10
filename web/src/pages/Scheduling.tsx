@@ -224,6 +224,17 @@ function SchedulingView() {
                       ? 'groupSchedulingDynamic'
                       : 'groupSchedulingStatic',
                   )}{' '}
+                  {preview.data.policy && (
+                    <>
+                      {t('schedulingResetPreference')}:{' '}
+                      {t(
+                        preview.data.dynamic && preview.data.policy.enabled
+                          ? 'active'
+                          : 'disabled',
+                      )}{' '}
+                      ·{' '}
+                    </>
+                  )}
                   {preview.data.as_of !== undefined &&
                     t('availabilityObserved', {
                       date: date(preview.data.as_of),
@@ -505,7 +516,7 @@ function SchedulingParameters({
               </tr>
             </thead>
             <tbody>
-              {[1, 0.75, 0.5, 0.25, 0].map((v) => (
+              {[1, 0.75, 0.5, 0.25, 0.01].map((v) => (
                 <tr key={v} className="border-t border-border">
                   <td className="px-3 py-2">{v * 100}%</td>
                   <td className="px-3 py-2">

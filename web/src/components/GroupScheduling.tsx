@@ -113,6 +113,16 @@ function SchedulingContent({ id, name }: { id: number; name: string }) {
                   : 'groupSchedulingStatic',
               )}
             </p>
+            {query.data.policy && (
+              <p className="text-xs text-muted-foreground">
+                {t('schedulingResetPreference')}:{' '}
+                {t(
+                  query.data.dynamic && query.data.policy.enabled
+                    ? 'active'
+                    : 'disabled',
+                )}
+              </p>
+            )}
             {query.data.weights.length === 0 ? (
               <p role="status" className="text-sm text-muted-foreground">
                 {t('groupSchedulingEmpty')}
