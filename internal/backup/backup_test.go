@@ -193,6 +193,7 @@ func TestFormerProxyCheckArchiveStillRestores(t *testing.T) {
 	}
 	// Keep this archive on its historical schema so restore exercises newer migrations.
 	if _, err := connection.ExecContext(ctx, `DROP TABLE usage_minutes;
+ALTER TABLE group_accounts DROP COLUMN preference_boost;
 DROP TABLE auth_challenges;
 DROP TABLE passkeys;
 DROP TABLE recovery_codes;
