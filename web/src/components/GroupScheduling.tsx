@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Scale } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { accountOptions } from '@/lib/accounts'
 import { channelOptions } from '@/lib/channels'
 import { schedulingOptions } from '@/lib/groups'
@@ -73,6 +74,11 @@ function SchedulingContent({ id, name }: { id: number; name: string }) {
         <DialogTitle>{t('groupSchedulingFor', { name })}</DialogTitle>
         <DialogDescription>{t('groupSchedulingDescription')}</DialogDescription>
       </DialogHeader>
+      <Button variant="outline" asChild>
+        <Link to="/groups/scheduling" search={{ group: id, model }}>
+          {t('schedulingDashboard')}
+        </Link>
+      </Button>
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1 space-y-2">
           <label htmlFor={`scheduling-model-${id}`} className="text-sm">
@@ -144,6 +150,13 @@ function SchedulingContent({ id, name }: { id: number; name: string }) {
                         load: format(w.load_factor),
                       })}
                     </p>
+                    {w.reset && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('schedulingResetFactor', {
+                          factor: format(w.reset.factor),
+                        })}
+                      </p>
+                    )}
                     {w.quota_state !== 'available' && (
                       <p className="text-xs text-muted-foreground">
                         {t(

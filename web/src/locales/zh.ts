@@ -1,6 +1,81 @@
 import type { en } from './en'
 
 export const zh: Record<keyof typeof en, string> = {
+  schedulingChartHint: '悬停或轻触查看观测数据。',
+  schedulingChartKeys:
+    '使用左右方向键查看观测数据，Home 和 End 跳转到首条和末条。',
+  schedulingChartGaps: '缺失的观测数据以断点显示。',
+  schedulingMultiplier: '重置系数',
+
+  schedulingCurveHint:
+    '提升区间内的重置系数；仅适用于新鲜且可用的额度。到达重置时刻后仍按正常准入处理。',
+  schedulingTimeLeft: '剩余时间 / 提升区间',
+  schedulingRemainingPercent: '剩余额度（%）',
+  schedulingDuration: '平均耗时（毫秒）',
+  schedulingFirstOutput: '平均首输出延迟（毫秒）',
+  schedulingErrors: '失败请求',
+  schedulingScope: '已记录路由范围',
+  schedulingCycleCoverage:
+    '完整周期：{{complete}} / 已观测：{{observed}} · 可比较账号和窗口组合：{{cohorts}}',
+  schedulingRecommendation:
+    '版本 {{revision}} 在可比较版本中观测到的周期末余额最低。可在参数页审阅；这仅是观测依据，并不保证改进效果。',
+  schedulingCycles: '完整周期',
+  schedulingEndBalance: '重置前最后观测余额',
+  schedulingLimitedEvidence: '观测覆盖不足',
+  schedulingComparableCycle: '观测覆盖完整',
+  schedulingResetEvidence: '实际重置观测记录',
+  schedulingObservationAge: '于重置前 {{seconds}} 秒观测',
+
+  schedulingDashboard: '调度概览',
+  schedulingCurrent: '当前分配',
+  schedulingHistory: '历史观测',
+  schedulingParameters: '调度参数',
+  schedulingDescription: '查看分配偏好、共享账号请求压力及实际额度变化。',
+  schedulingPressure: '共享在途请求',
+  schedulingWeight: '有效权重',
+  schedulingTarget: '目标分配占比',
+  schedulingFactors: '权重因子',
+  schedulingEquation:
+    '额度 × 重置紧迫度 × 负载 × 组内偏好。已有会话保留原账号。',
+  schedulingTimingUnknown: '无可用重置时间',
+  schedulingResetFactor: '重置系数：{{factor}} 倍',
+  schedulingEligible: '可参与分配',
+  schedulingPolicyExcluded: '策略排除',
+  schedulingBusy: '并发已满',
+  schedulingModelExcluded: '不支持该模型',
+  schedulingLowerTier: '较低优先级',
+  schedulingDraftHint:
+    '草稿保存后影响新增分配；部署需启用动态加权。预览只读取本地观测，不调用上游。',
+  schedulingRevision: '版本 {{revision}}',
+  schedulingResetPreference: '优先使用临近重置的额度',
+  schedulingMaxMultiplier: '重置提升上限（1–2 倍）',
+  schedulingHorizonFraction: '提升区间占窗口时长比例（0.01–1）',
+  schedulingMaxHorizon: '最长提升区间（秒）',
+  schedulingCurvePower: '曲线指数（1–4）',
+  schedulingSave: '保存调度参数',
+  schedulingPreview: '预览草稿权重',
+  schedulingConflict: '参数已发生变化，请刷新并重新审阅后保存。',
+  schedulingSaved: '调度参数已保存。',
+  schedulingPolicyHistory: '参数版本记录',
+  schedulingRestore: '载入为草稿',
+  schedulingHistoryHint:
+    '历史涵盖本组所有模型；压力和额度由各组共享。压力来自采样，额度来自上游观测；缺失数据不代表零。',
+  schedulingChooseResource: '选择资源查看趋势',
+  schedulingWindow: '额度窗口',
+  schedulingNoHistory: '此选择尚无已采集的观测数据。',
+  schedulingCoverage: '开始采集于 {{date}} · 最近保存于 {{flush}}',
+  schedulingPartial:
+    '历史数据不完整：已达到响应或采集上限。丢弃样本数：{{count}}。',
+  schedulingExpectedHint:
+    '预期与实际次数统计已记录范围内的普通轮转决策；预期次数累加决策当时的份额，而非当前权重。绑定续接及父任务偏好不计入。',
+  schedulingExpected: '预期分配次数',
+  schedulingActual: '实际分配次数',
+  schedulingLimited: '受限流请求',
+  schedulingWait: '平均排队时间（毫秒）',
+  schedulingEvaluation: '参数评估',
+  schedulingInsufficient:
+    '积累完整、可比较的额度周期及足够流量后再推荐参数；仅凭历史重分配无法证明节省了额度。',
+
   groupPreferenceBoost: '偏好加成',
   groupPreferenceBoostHint:
     '为本组计算出的偏好增加 0–300%。100% 表示权重翻倍。已有会话保留账号，加成不能绕过限制。',

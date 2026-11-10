@@ -1,4 +1,81 @@
 export const en = {
+  schedulingChartHint: 'Hover or tap to inspect an observation.',
+  schedulingChartKeys:
+    'Use left and right arrows to inspect observations, Home and End for the first and last.',
+  schedulingChartGaps: 'Missing observations appear as gaps.',
+  schedulingMultiplier: 'Reset multiplier',
+
+  schedulingCurveHint:
+    'Reset multiplier inside the reward horizon; fresh eligible quota only. The reset boundary itself uses normal admission.',
+  schedulingTimeLeft: 'Time remaining / reward horizon',
+  schedulingRemainingPercent: 'Remaining quota (%)',
+  schedulingDuration: 'Mean duration (ms)',
+  schedulingFirstOutput: 'Mean first output latency (ms)',
+  schedulingErrors: 'Failed requests',
+  schedulingScope: 'Recorded routing scope',
+  schedulingCycleCoverage:
+    'Complete cycles: {{complete}} / observed: {{observed}} · comparable account/window cohorts: {{cohorts}}',
+  schedulingRecommendation:
+    'Revision {{revision}} has the lowest observed remaining balance among comparable revisions. Review it in Parameters; this is observational evidence, not a guaranteed improvement.',
+  schedulingCycles: 'Complete cycles',
+  schedulingEndBalance: 'Last balance before reset',
+  schedulingLimitedEvidence: 'Insufficient coverage',
+  schedulingComparableCycle: 'Complete coverage',
+  schedulingResetEvidence: 'Observed reset evidence',
+  schedulingObservationAge: 'Observed {{seconds}} seconds before reset',
+
+  schedulingDashboard: 'Scheduling overview',
+  schedulingCurrent: 'Current distribution',
+  schedulingHistory: 'History',
+  schedulingParameters: 'Parameters',
+  schedulingDescription:
+    'Inspect placement preferences, shared account pressure, and observed quota changes.',
+  schedulingPressure: 'Shared active requests',
+  schedulingWeight: 'Effective weight',
+  schedulingTarget: 'Target placement share',
+  schedulingFactors: 'Weight factors',
+  schedulingEquation:
+    'Quota × reset urgency × load × group preference. Existing conversations retain their account.',
+  schedulingTimingUnknown: 'No usable reset timing',
+  schedulingResetFactor: 'Reset factor: {{factor}}×',
+  schedulingEligible: 'Eligible',
+  schedulingPolicyExcluded: 'Excluded by policy',
+  schedulingBusy: 'Concurrency full',
+  schedulingModelExcluded: 'Model unsupported',
+  schedulingLowerTier: 'Lower priority tier',
+  schedulingDraftHint:
+    'Draft changes affect new placement after saving. Dynamic weighting must be enabled by the deployment. Preview uses local observations and does not contact providers.',
+  schedulingRevision: 'Revision {{revision}}',
+  schedulingResetPreference: 'Prefer quota approaching its reset',
+  schedulingMaxMultiplier: 'Maximum reset multiplier (1–2)',
+  schedulingHorizonFraction: 'Reward horizon / window duration (0.01–1)',
+  schedulingMaxHorizon: 'Maximum reward horizon (seconds)',
+  schedulingCurvePower: 'Curve power (1–4)',
+  schedulingSave: 'Save scheduling parameters',
+  schedulingPreview: 'Preview draft weights',
+  schedulingConflict:
+    'The policy changed. Refresh and review before saving again.',
+  schedulingSaved: 'Scheduling parameters saved.',
+  schedulingPolicyHistory: 'Parameter versions',
+  schedulingRestore: 'Load as draft',
+  schedulingHistoryHint:
+    'History covers this group across all models. Pressure and quota are shared across groups. Pressure is sampled; quota is provider-reported. Missing observations are not zero.',
+  schedulingChooseResource: 'Select a resource to inspect its trend',
+  schedulingWindow: 'Quota window',
+  schedulingNoHistory: 'No observations collected for this selection.',
+  schedulingCoverage: 'Collection began {{date}} · last saved {{flush}}',
+  schedulingPartial:
+    'Partial history: response bounds or collection limits apply. Dropped samples: {{count}}.',
+  schedulingExpectedHint:
+    'Expected and actual counts cover ordinary rotation decisions in the recorded scopes. Expected counts sum shares at decision time, not current weights. Bound turns and parent preferences are excluded.',
+  schedulingExpected: 'Expected placements',
+  schedulingActual: 'Actual placements',
+  schedulingLimited: 'Rate-limited requests',
+  schedulingWait: 'Mean queue wait (ms)',
+  schedulingEvaluation: 'Parameter evaluation',
+  schedulingInsufficient:
+    'Collect complete comparable quota cycles and sufficient demand before recommending parameters. Historical redistribution alone cannot prove quota savings.',
+
   groupPreferenceBoost: 'Preference boost',
   groupPreferenceBoostHint:
     'Increase this group’s calculated preference by 0–300%. 100% doubles the weight. Existing conversations keep their account; boosts cannot bypass limits.',

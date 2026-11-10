@@ -142,7 +142,40 @@ export function groupErrorKey(error: Error) {
   return 'groupSaveFailed'
 }
 
-const schedulingSchema = z.object({
+export const schedulingPolicySchema = z.object({
+  enabled: z.boolean(),
+  max_multiplier: z.number().min(1).max(2),
+  horizon_fraction: z.number().min(0.01).max(1),
+  max_horizon_seconds: z.number().int().min(60).max(604800),
+  curve_power: z.number().min(1).max(4),
+  revision: z.number().int().nonnegative(),
+})
+export type SchedulingPolicy = z.infer<typeof schedulingPolicySchema>
+const schedulingSnapshotSchema = z.object({
+  as_of: z.number().int().nonnegative().optional(),
+  policy: schedulingPolicySchema.optional(),
+  resources: z
+    .array(
+      z.object({
+        account_id: z.string(),
+        state: z.enum([
+          'eligible',
+          'policy',
+          'unavailable',
+          'busy',
+          'cooling',
+          'quota',
+          'catalog_unknown',
+          'model',
+          'lower_tier',
+        ]),
+        tier: z.number().int(),
+        in_flight: z.number().int().nonnegative(),
+        max_concurrency: z.number().int().nonnegative(),
+      }),
+    )
+    .max(100)
+    .optional(),
   dynamic: z.boolean(),
   weights: z
     .array(
@@ -159,13 +192,32 @@ const schedulingSchema = z.object({
         quota_factor: z.number().min(0).max(1),
         load_factor: z.number().positive().max(1),
         preference_boost: z.number().int().min(0).max(300),
-        effective_weight: z.number().positive().max(4),
+        effective_weight: z.number().positive().max(8),
+        reset: z
+          .object({
+            factor: z.number().min(1).max(2),
+            reason: z.enum([
+              'disabled',
+              'unavailable',
+              'timing_unknown',
+              'outside_horizon',
+              'approaching_reset',
+            ]),
+            window: z.string().max(32),
+            reset_at: z.number().int().nullable(),
+            window_seconds: z.number().int().nullable(),
+            remaining_percent: z.number().min(0).max(100).nullable(),
+          })
+          .optional(),
         target_share: z.number().min(0).max(1),
         in_flight: z.number().int().nonnegative(),
         max_concurrency: z.number().int().positive(),
       }),
     )
     .max(100),
+})
+export const schedulingSchema = schedulingSnapshotSchema.extend({
+  baseline: schedulingSnapshotSchema.shape.weights.optional(),
 })
 export function schedulingOptions(id: number, model: string) {
   return queryOptions({

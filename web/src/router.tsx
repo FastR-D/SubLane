@@ -198,6 +198,24 @@ const routes = root.addChildren([
   }),
   createRoute({
     getParentRoute: () => root,
+    path: '/groups/scheduling',
+    validateSearch: (search: Record<string, unknown>) => ({
+      group:
+        Number.isInteger(Number(search.group)) && Number(search.group) > 0
+          ? Number(search.group)
+          : undefined,
+      model:
+        typeof search.model === 'string'
+          ? search.model.slice(0, 160)
+          : undefined,
+    }),
+    component: lazyRouteComponent(
+      () => import('@/pages/Scheduling'),
+      'Scheduling',
+    ),
+  }),
+  createRoute({
+    getParentRoute: () => root,
     path: '/members',
     component: lazyRouteComponent(() => import('@/pages/Members'), 'Members'),
   }),

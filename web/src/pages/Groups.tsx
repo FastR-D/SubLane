@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderClosed, LoaderCircle, Plus } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { groupOptions } from '@/lib/groups'
 import { CatalogDialog } from '@/components/CatalogDialog'
@@ -33,10 +34,20 @@ export function Groups() {
         <div>
           <h1 className="page-title">{t('accountGroups')}</h1>
         </div>
-        <Button data-tour="pool" onClick={() => setEditing(0)}>
-          <Plus aria-hidden="true" />
-          {t('createGroup')}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link
+              to="/groups/scheduling"
+              search={{ group: undefined, model: undefined }}
+            >
+              {t('schedulingDashboard')}
+            </Link>
+          </Button>
+          <Button data-tour="pool" onClick={() => setEditing(0)}>
+            <Plus aria-hidden="true" />
+            {t('createGroup')}
+          </Button>
+        </div>
       </div>
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         {t('groupsAssignmentHint')}
