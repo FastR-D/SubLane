@@ -86,16 +86,17 @@ func (s *smoothScheduler) choose(scope string, candidates []weightedCandidate) s
 }
 
 type SchedulingWeight struct {
-	AccountID       string  `json:"account_id"`
-	QuotaState      string  `json:"quota_state"`
-	QuotaUpdatedAt  *int64  `json:"quota_updated_at"`
-	QuotaFactor     float64 `json:"quota_factor"`
-	LoadFactor      float64 `json:"load_factor"`
-	PreferenceBoost int64   `json:"preference_boost"`
-	EffectiveWeight float64 `json:"effective_weight"`
-	TargetShare     float64 `json:"target_share"`
-	InFlight        int64   `json:"in_flight"`
-	MaxConcurrency  int64   `json:"max_concurrency"`
+	Reset           ResetWeight `json:"reset"`
+	AccountID       string      `json:"account_id"`
+	QuotaState      string      `json:"quota_state"`
+	QuotaUpdatedAt  *int64      `json:"quota_updated_at"`
+	QuotaFactor     float64     `json:"quota_factor"`
+	LoadFactor      float64     `json:"load_factor"`
+	PreferenceBoost int64       `json:"preference_boost"`
+	EffectiveWeight float64     `json:"effective_weight"`
+	TargetShare     float64     `json:"target_share"`
+	InFlight        int64       `json:"in_flight"`
+	MaxConcurrency  int64       `json:"max_concurrency"`
 }
 
 func schedulingFactors(quota quotaDecision, boost, inFlight, limit int64, dynamic bool) SchedulingWeight {
@@ -119,7 +120,7 @@ func schedulingFactors(quota quotaDecision, boost, inFlight, limit int64, dynami
 	return SchedulingWeight{QuotaState: quota.State, QuotaFactor: q, LoadFactor: l, PreferenceBoost: boost, EffectiveWeight: q * l * (1 + float64(boost)/100), InFlight: inFlight, MaxConcurrency: limit}
 }
 
-func (s *Service) candidateWeights(candidates []string, snapshots map[string]db.ListRoutingAccountsRow, model string) ([]weightedCandidate, []SchedulingWeight) {
+func (s *Service) candidateWeights(candidates []string, snapshots map[string]db.ListRoutingAccountsRow, model string, policy groups.SchedulingPolicy) ([]weightedCandidate, []SchedulingWeight) {
 	weighted := make([]weightedCandidate, 0, len(candidates))
 	details := make([]SchedulingWeight, 0, len(candidates))
 	total := 0.0
@@ -128,11 +129,21 @@ func (s *Service) candidateWeights(candidates []string, snapshots map[string]db.
 		state := s.health[id]
 		q := s.snapshotQuota(row.Provider, model, row.UsageSnapshot, row.UsageUpdatedAt)
 		v := schedulingFactors(q, row.PreferenceBoost, state.InFlight, state.MaxConcurrency, s.policy.QuotaWeighted)
+		v.Reset = ResetWeight{Factor: 1, Reason: "disabled"}
+		if s.policy.QuotaWeighted && policy.Enabled {
+			v.Reset.Reason = "unavailable"
+			if quotaRoutingSupported(row.Provider) {
+				if value := decodeUsage(row.UsageSnapshot, row.UsageUpdatedAt); value != nil {
+					v.Reset = resetWeight(quotaForModel(*value, row.Provider, model), s.now(), policy)
+				}
+			}
+		}
+		v.EffectiveWeight *= v.Reset.Factor
 		v.AccountID = id
 		v.QuotaUpdatedAt = row.UsageUpdatedAt
 		// Authorization/runtime epochs and explicit group preferences invalidate old
 		// credit; changing observations and load retain bounded smooth progress.
-		epoch := fmt.Sprintf("%d:%d:%d", row.ModelsRevision, state.revision, row.PreferenceBoost)
+		epoch := fmt.Sprintf("%d:%d:%d:%d", row.ModelsRevision, state.revision, row.PreferenceBoost, policy.Revision)
 		weighted = append(weighted, weightedCandidate{id: id, weight: v.EffectiveWeight, epoch: epoch})
 		details = append(details, v)
 		total += v.EffectiveWeight
@@ -144,9 +155,11 @@ func (s *Service) candidateWeights(candidates []string, snapshots map[string]db.
 }
 
 type SchedulingPreview struct {
-	Dynamic bool               `json:"dynamic"`
-	Weights []SchedulingWeight `json:"weights"`
-	Route   *RouteExplanation  `json:"route"`
+	AsOf    int64                   `json:"as_of"`
+	Policy  groups.SchedulingPolicy `json:"policy"`
+	Dynamic bool                    `json:"dynamic"`
+	Weights []SchedulingWeight      `json:"weights"`
+	Route   *RouteExplanation       `json:"route"`
 }
 type schedulingPreviewKey struct{}
 
@@ -161,7 +174,7 @@ func (s *Service) Scheduling(ctx context.Context, userID, groupID int64, model s
 	if len(native) > 128 {
 		return SchedulingPreview{}, upstream.ErrInput
 	}
-	result := SchedulingPreview{Dynamic: s.policy.QuotaWeighted, Weights: []SchedulingWeight{}, Route: &RouteExplanation{}}
+	result := SchedulingPreview{AsOf: s.now().Unix(), Dynamic: s.policy.QuotaWeighted, Weights: []SchedulingWeight{}, Route: &RouteExplanation{}}
 	ctx = context.WithValue(ctx, routeKey{}, result.Route)
 	ctx = context.WithValue(ctx, schedulingPreviewKey{}, &result)
 	s.mu.Lock()

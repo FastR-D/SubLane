@@ -52,6 +52,13 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	}
 	defer tx.Rollback()
 	q := s.queries.WithTx(tx)
+	schedulingPolicy, err := groups.ReadSchedulingPolicy(ctx, q, s.tenantID)
+	if err != nil {
+		return "", digest, err
+	}
+	if preview, ok := ctx.Value(schedulingPreviewKey{}).(*SchedulingPreview); ok {
+		preview.Policy = schedulingPolicy
+	}
 	rows, err := q.ListRoutingAccounts(ctx, db.ListRoutingAccountsParams{TenantID: s.tenantID, GroupID: groupID})
 	if err != nil {
 		return "", digest, err
@@ -337,7 +344,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	route.Candidates = min(maxRouteCount, len(candidates))
 	// Isolate rotation across preference tiers so traffic using another protocol cannot starve this pool.
 	cursor := fmt.Sprintf("%d:%s:%s:%s:%d", groupID, scope, policy.Routing.Preference, preferred, bestRank)
-	weighted, details := s.candidateWeights(candidates, snapshots, model)
+	weighted, details := s.candidateWeights(candidates, snapshots, model, schedulingPolicy)
 	if s.policy.QuotaWeighted {
 		route.Strategy = "quota_weighted"
 	}

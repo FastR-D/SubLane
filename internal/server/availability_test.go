@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/murongg/SubLane/internal/apikey"
+	"github.com/murongg/SubLane/internal/groups"
 )
 
 func TestModelAvailabilityEndpointsProtectIdentityAndKeyLifecycle(t *testing.T) {
@@ -49,6 +50,39 @@ func TestModelAvailabilityEndpointsProtectIdentityAndKeyLifecycle(t *testing.T) 
 	}
 	if response := request(h, "GET", path, "", nil, member); response.Code != 409 {
 		t.Fatal("disabled key", response.Code)
+	}
+}
+
+func TestSchedulingPolicyAuthorizationAndStaleSave(t *testing.T) {
+	f := newForwardFixture(t, func(http.ResponseWriter, *http.Request) { t.Fatal("policy contacted upstream") })
+	h := f.server.Config.Handler
+	login := func(name, password string) *http.Cookie {
+		return request(h, "POST", "/api/auth/login", "http://example.test", map[string]string{"username": name, "password": password}, nil).Result().Cookies()[0]
+	}
+	owner := login("owner-test", "owner pass 42")
+	member := login("member-test", "member pass 42")
+	path := "/api/groups/scheduling-policy"
+	for _, tc := range []struct {
+		cookie *http.Cookie
+		code   int
+	}{{nil, 401}, {member, 403}, {owner, 200}} {
+		if r := request(h, "GET", path, "", nil, tc.cookie); r.Code != tc.code {
+			t.Fatal(r.Code, r.Body.String())
+		}
+	}
+	p := groups.DefaultSchedulingPolicy()
+	p.Enabled = true
+	if r := request(h, "PUT", path, "http://example.test", p, member); r.Code != 403 {
+		t.Fatal(r.Code)
+	}
+	if r := request(h, "PUT", path, "http://example.test", p, owner); r.Code != 200 {
+		t.Fatal(r.Code, r.Body.String())
+	}
+	if r := request(h, "PUT", path, "http://example.test", p, owner); r.Code != 409 {
+		t.Fatal(r.Code, r.Body.String())
+	}
+	if r := request(h, "GET", path+"/revisions", "", nil, owner); r.Code != 200 || !strings.Contains(r.Body.String(), `"revision":1`) {
+		t.Fatal(r.Code, r.Body.String())
 	}
 }
 
