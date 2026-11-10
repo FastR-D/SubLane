@@ -47,7 +47,7 @@ func TestQuotaWeightedSelectionKeepsBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.next = map[string]int{}
+	s.scheduler = smoothScheduler{}
 	for i := 0; i < 5; i++ {
 		id, _, err := s.selectAccount(ctx, 1, 1, "synthetic-weighted-session", "codex", "", Responses)
 		if err != nil || id != bound {
@@ -58,15 +58,16 @@ func TestQuotaWeightedSelectionKeepsBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	counts = map[string]int{}
-	for i := 0; i < 10; i++ {
+	s.scheduler = smoothScheduler{}
+	for i := 0; i < 140; i++ {
 		id, _, err := s.selectAccount(ctx, 1, 1, "", "codex", "", Responses)
 		if err != nil {
 			t.Fatal(err)
 		}
 		counts[id]++
 	}
-	if counts[ids["codex"]] != 5 || counts[second.ID] != 5 {
-		t.Fatal("unknown quota must preserve equal rotation", counts)
+	if counts[ids["codex"]] != 90 || counts[second.ID] != 50 {
+		t.Fatal("unknown quota must use its own conservative fallback", counts)
 	}
 }
 

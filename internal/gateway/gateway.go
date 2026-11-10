@@ -52,7 +52,7 @@ type Service struct {
 	provider           *upstream.Client
 	slots              chan struct{}
 	mu                 sync.Mutex
-	next               map[string]int
+	scheduler          smoothScheduler
 	health             map[string]*Runtime
 	modelHealth        map[modelKey]*modelRuntime
 	memberActive       map[int64]int64
@@ -99,7 +99,7 @@ func NewForTenantWithPolicy(ctx context.Context, connection *sql.DB, accounts *a
 	if len(catalogs) > 0 {
 		catalog = catalogs[0]
 	}
-	return &Service{memberActive: make(map[int64]int64), waiting: make(map[int64]int), capacityChanged: make(map[int64]chan struct{}), accountWaitTimeout: policy.QueueTimeout, policy: policy, next: make(map[string]int), health: make(map[string]*Runtime), modelHealth: make(map[modelKey]*modelRuntime), now: time.Now, runContext: runContext, stopRuntime: stopRuntime, db: connection, queries: db.New(connection), accounts: accounts, tenantID: tenantID, provider: provider, slots: make(chan struct{}, policy.Capacity), usage: newUsageCache(ctx), catalog: newCatalogCache(ctx), pricing: catalog}
+	return &Service{memberActive: make(map[int64]int64), waiting: make(map[int64]int), capacityChanged: make(map[int64]chan struct{}), accountWaitTimeout: policy.QueueTimeout, policy: policy, health: make(map[string]*Runtime), modelHealth: make(map[modelKey]*modelRuntime), now: time.Now, runContext: runContext, stopRuntime: stopRuntime, db: connection, queries: db.New(connection), accounts: accounts, tenantID: tenantID, provider: provider, slots: make(chan struct{}, policy.Capacity), usage: newUsageCache(ctx), catalog: newCatalogCache(ctx), pricing: catalog}
 }
 
 func (s *Service) Acquire() (func(), error) {

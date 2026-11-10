@@ -51,3 +51,32 @@ func TestModelAvailabilityEndpointsProtectIdentityAndKeyLifecycle(t *testing.T) 
 		t.Fatal("disabled key", response.Code)
 	}
 }
+
+func TestSchedulingPreviewIsAdministratorOnlyAndDoesNotExecute(t *testing.T) {
+	f := newForwardFixture(t, func(http.ResponseWriter, *http.Request) { t.Fatal("preview executed upstream") })
+	h := f.server.Config.Handler
+	login := func(name, password string) *http.Cookie {
+		return request(h, "POST", "/api/auth/login", "http://example.test", map[string]string{"username": name, "password": password}, nil).Result().Cookies()[0]
+	}
+	member := login("member-test", "member pass 42")
+	owner := login("owner-test", "owner pass 42")
+	path := "/api/groups/1/scheduling?model=synthetic-model"
+	for _, tc := range []struct {
+		cookie *http.Cookie
+		code   int
+	}{{nil, 401}, {member, 403}, {owner, 200}} {
+		result := request(h, "GET", path, "", nil, tc.cookie)
+		if result.Code != tc.code {
+			t.Fatal(result.Code, result.Body.String())
+		}
+		if tc.code == 200 && !strings.Contains(result.Body.String(), `"target_share":1`) {
+			t.Fatal(result.Body.String())
+		}
+	}
+	if result := request(h, "GET", "/api/groups/1/scheduling?model=bad%20model", "", nil, owner); result.Code != 400 {
+		t.Fatal(result.Code)
+	}
+	if result := request(h, "GET", "/api/groups/999/scheduling", "", nil, owner); result.Code != 404 {
+		t.Fatal(result.Code)
+	}
+}

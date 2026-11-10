@@ -30,6 +30,7 @@ func (h *groupHTTP) register(router chi.Router) {
 	router.Get("/{id}", h.get)
 	router.Get("/{id}/members", h.poolMembers)
 	router.Get("/{id}/models", h.catalog)
+	router.Get("/{id}/scheduling", h.scheduling)
 	router.Get("/{id}/models/availability", h.availability)
 	router.Patch("/{id}", h.update)
 	router.Get("/members/{id}", h.memberGroups)
@@ -203,4 +204,26 @@ func groupError(w http.ResponseWriter, err error) {
 		status, code = 403, "group_unavailable"
 	}
 	writeJSON(w, status, map[string]string{"error": code})
+}
+
+func (h *groupHTTP) scheduling(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil || id <= 0 {
+		groupError(w, groups.ErrInput)
+		return
+	}
+	if h.gateway == nil {
+		writeJSON(w, 503, map[string]string{"error": "unavailable"})
+		return
+	}
+	if _, err := h.service.Get(r.Context(), id); err != nil {
+		groupError(w, err)
+		return
+	}
+	value, err := h.gateway.Scheduling(r.Context(), sessionUser(r).ID, id, r.URL.Query().Get("model"))
+	if err != nil {
+		gatewayError(w, err)
+		return
+	}
+	writeJSON(w, 200, value)
 }

@@ -221,14 +221,14 @@ func TestRouteExplanationCapturesNoSelectionAndBlockedBinding(t *testing.T) {
 	}
 }
 
-func TestRouteExplanationDistinguishesWeightingFromRotationFallback(t *testing.T) {
+func TestRouteExplanationRetainsWeightingWithUnknownCandidate(t *testing.T) {
 	s, parent, other := reviewGateway(t)
 	s.policy.QuotaWeighted = true
 	for _, id := range []string{parent, other} {
 		saveProviderQuota(t, s, id, upstream.Usage{UpdatedAt: s.now().Unix(), Limits: []upstream.UsageLimit{{Windows: []upstream.UsageWindow{{UsedPercent: quotaFloat(20)}}}}})
 	}
-	for _, want := range []string{"quota_weighted", "rotation"} {
-		if want == "rotation" {
+	for i, want := range []string{"quota_weighted", "quota_weighted"} {
+		if i == 1 {
 			if _, err := s.db.Exec("DELETE FROM account_usage WHERE account_id=?", other); err != nil {
 				t.Fatal(err)
 			}

@@ -83,7 +83,7 @@ func (q *Queries) ListResourceGroups(ctx context.Context, arg ListResourceGroups
 }
 
 const listRoutingAccounts = `-- name: ListRoutingAccounts :many
-SELECT a.id,a.provider,a.enabled,a.status,a.models_snapshot,a.models_revision,u.snapshot AS usage_snapshot,u.updated_at AS usage_updated_at
+SELECT ga.preference_boost,a.id,a.provider,a.enabled,a.status,a.models_snapshot,a.models_revision,u.snapshot AS usage_snapshot,u.updated_at AS usage_updated_at
 FROM accounts a JOIN group_accounts ga ON ga.account_id=a.id
 LEFT JOIN account_usage u ON u.account_id=a.id AND u.revision=a.models_revision+a.usage_revision
 WHERE a.tenant_id=?1 AND ga.group_id=?2
@@ -96,14 +96,15 @@ type ListRoutingAccountsParams struct {
 }
 
 type ListRoutingAccountsRow struct {
-	ID             string
-	Provider       string
-	Enabled        bool
-	Status         string
-	ModelsSnapshot []byte
-	ModelsRevision int64
-	UsageSnapshot  []byte
-	UsageUpdatedAt *int64
+	PreferenceBoost int64
+	ID              string
+	Provider        string
+	Enabled         bool
+	Status          string
+	ModelsSnapshot  []byte
+	ModelsRevision  int64
+	UsageSnapshot   []byte
+	UsageUpdatedAt  *int64
 }
 
 func (q *Queries) ListRoutingAccounts(ctx context.Context, arg ListRoutingAccountsParams) ([]ListRoutingAccountsRow, error) {
@@ -116,6 +117,7 @@ func (q *Queries) ListRoutingAccounts(ctx context.Context, arg ListRoutingAccoun
 	for rows.Next() {
 		var i ListRoutingAccountsRow
 		if err := rows.Scan(
+			&i.PreferenceBoost,
 			&i.ID,
 			&i.Provider,
 			&i.Enabled,
