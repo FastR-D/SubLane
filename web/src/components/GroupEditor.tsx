@@ -119,6 +119,15 @@ function GroupForm({
     value?.restricted_models ?? false,
   )
   const [models, setModels] = useState(value?.allowed_models.join('\n') ?? '')
+  const [boosts, setBoosts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      Object.entries(value?.preference_boosts ?? {}).map(([id, boost]) => [
+        id,
+        String(boost),
+      ]),
+    ),
+  )
+  const [boostInvalid, setBoostInvalid] = useState(false)
   const [invalid, setInvalid] = useState(false)
   const accounts = useQuery(accountOptions)
   const channels = useQuery(channelOptions)
@@ -127,8 +136,14 @@ function GroupForm({
     event.preventDefault()
     if (mutation.isPending || !accounts.data || !channels.data) return
     const valid = name.trim().length > 0 && Array.from(name.trim()).length <= 64
+    const ids = [...selected, ...selectedChannels]
+    const validBoosts = ids.every(
+      (id) =>
+        /^[0-9]+$/.test(boosts[id] ?? '0') && Number(boosts[id] ?? 0) <= 300,
+    )
+    setBoostInvalid(!validBoosts)
     setInvalid(!valid)
-    if (valid)
+    if (valid && validBoosts)
       mutation.mutate({
         id: value?.id,
         name: name.trim(),
@@ -137,6 +152,9 @@ function GroupForm({
           ...selected.map((id) => ({ kind: 'subscription' as const, id })),
           ...selectedChannels.map((id) => ({ kind: 'channel' as const, id })),
         ],
+        preference_boosts: Object.fromEntries(
+          ids.map((id) => [id, Number(boosts[id] ?? 0)]),
+        ),
         routing: { preference, allow_api_fallback: fallback },
         model_policy: {
           restricted,
@@ -318,6 +336,74 @@ function GroupForm({
             </div>
           )}
         </fieldset>
+        {(selected.length > 0 || selectedChannels.length > 0) && (
+          <fieldset className="space-y-3" disabled={mutation.isPending}>
+            <legend className="text-sm font-medium">
+              {t('groupPreferenceBoost')}
+            </legend>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {t('groupPreferenceBoostHint')}
+            </p>
+            {[
+              ...(accounts.data?.accounts ?? []),
+              ...(channels.data?.channels ?? []),
+            ]
+              .filter(
+                (resource) =>
+                  selected.includes(resource.id) ||
+                  selectedChannels.includes(resource.id),
+              )
+              .map((resource) => (
+                <div
+                  key={resource.id}
+                  className="flex flex-wrap items-center gap-2 border-b border-border py-2"
+                >
+                  <label
+                    htmlFor={`boost-${resource.id}`}
+                    className="min-w-0 flex-1 break-words text-sm"
+                  >
+                    {resource.name}
+                  </label>
+                  <Input
+                    id={`boost-${resource.id}`}
+                    type="number"
+                    min={0}
+                    max={300}
+                    step={1}
+                    className="w-24"
+                    value={boosts[resource.id] ?? '0'}
+                    aria-label={t('groupBoostFor', { name: resource.name })}
+                    aria-invalid={boostInvalid}
+                    onChange={(event) =>
+                      setBoosts((current) => ({
+                        ...current,
+                        [resource.id]: event.target.value,
+                      }))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t('groupBoostReset', { name: resource.name })}
+                    onClick={() =>
+                      setBoosts((current) => ({
+                        ...current,
+                        [resource.id]: '0',
+                      }))
+                    }
+                  >
+                    {t('groupBoostResetAction')}
+                  </Button>
+                </div>
+              ))}
+            {boostInvalid && (
+              <p role="alert" className="text-sm text-error">
+                {t('groupBoostInvalid')}
+              </p>
+            )}
+          </fieldset>
+        )}
         <fieldset className="space-y-3" disabled={mutation.isPending}>
           <legend className="text-sm font-medium">{t('groupRouting')}</legend>
           <DropdownMenu modal={false}>

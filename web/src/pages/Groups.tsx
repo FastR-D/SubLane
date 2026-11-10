@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { groupOptions } from '@/lib/groups'
 import { CatalogDialog } from '@/components/CatalogDialog'
 import { GroupEditor } from '@/components/GroupEditor'
+import { GroupScheduling } from '@/components/GroupScheduling'
 import { Button } from '@/components/ui/Button'
 import { Status } from '@/components/Status'
 
@@ -16,6 +17,7 @@ export function Groups() {
   const saved = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ['groups'] }),
+      client.invalidateQueries({ queryKey: ['group-scheduling'] }),
       client.invalidateQueries({ queryKey: ['accounts'] }),
       client.invalidateQueries({ queryKey: ['channels'] }),
       client.invalidateQueries({ queryKey: ['model-catalog'] }),
@@ -124,7 +126,12 @@ export function Groups() {
                   )}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <GroupScheduling
+                  id={group.id}
+                  name={group.name}
+                  disabled={!group.enabled}
+                />
                 <CatalogDialog
                   target={{ kind: 'group', id: group.id }}
                   name={group.name}

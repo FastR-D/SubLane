@@ -23,6 +23,9 @@ const groupSchema = z.object({
   member_count: z.number().int().nonnegative(),
 })
 const detailSchema = groupSchema.extend({
+  preference_boosts: z
+    .record(z.string().min(1), z.number().int().min(0).max(300))
+    .default({}),
   resources: z
     .array(
       z.object({
@@ -73,6 +76,7 @@ export function saveGroup({
     preference: 'protocol' | 'subscription_first' | 'api_first'
     allow_api_fallback: boolean
   }
+  preference_boosts?: Record<string, number>
   model_policy: { restricted: boolean; models: string[] }
 }) {
   return request(id ? `/api/groups/${id}` : '/api/groups', detailSchema, {
@@ -136,4 +140,41 @@ export function groupErrorKey(error: Error) {
     if (error.code === 'invalid_group_input') return 'groupInputInvalid'
   }
   return 'groupSaveFailed'
+}
+
+const schedulingSchema = z.object({
+  dynamic: z.boolean(),
+  weights: z
+    .array(
+      z.object({
+        account_id: z.string().min(1),
+        quota_state: z.enum([
+          'available',
+          'exhausted',
+          'unknown',
+          'stale',
+          'unsupported',
+        ]),
+        quota_updated_at: z.number().int().positive().nullable(),
+        quota_factor: z.number().min(0).max(1),
+        load_factor: z.number().positive().max(1),
+        preference_boost: z.number().int().min(0).max(300),
+        effective_weight: z.number().positive().max(4),
+        target_share: z.number().min(0).max(1),
+        in_flight: z.number().int().nonnegative(),
+        max_concurrency: z.number().int().positive(),
+      }),
+    )
+    .max(100),
+})
+export function schedulingOptions(id: number, model: string) {
+  return queryOptions({
+    queryKey: ['group-scheduling', id, model],
+    queryFn: ({ signal }) =>
+      request(
+        `/api/groups/${id}/scheduling?model=${encodeURIComponent(model)}`,
+        schedulingSchema,
+        { signal },
+      ),
+  })
 }

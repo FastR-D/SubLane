@@ -1,6 +1,30 @@
 import type { en } from './en'
 
 export const zh: Record<keyof typeof en, string> = {
+  groupPreferenceBoost: '偏好加成',
+  groupPreferenceBoostHint:
+    '为本组计算出的偏好增加 0–300%。100% 表示权重翻倍。已有会话保留账号，加成不能绕过限制。',
+  groupBoostFor: '{{name}} 的偏好加成（%）',
+  groupBoostReset: '重置 {{name}} 的偏好加成',
+  groupBoostInvalid: '请输入 0 到 300 的整数百分比。',
+  groupBoostResetAction: '重置',
+  groupScheduling: '调度',
+  groupSchedulingFor: '{{name}} 的调度',
+  groupSchedulingDescription:
+    '展示新 Responses 会话的当前分配，未计入 Key 额度检查和父任务偏好。已有会话保留绑定；共享账号的容量由各组共同使用。',
+  groupSchedulingModel: '模型（可选；留空则不检查模型能力）',
+  groupSchedulingFailed: '无法加载调度信息，请刷新重试。',
+  groupSchedulingDynamic:
+    '已启用动态额度和负载加权。百分比表示新增分配目标，不是预留额度。',
+  groupSchedulingStatic: '动态加权未启用。使用平滑轮转和本组偏好加成分配。',
+  groupSchedulingEmpty: '当前选择没有符合条件的资源。',
+  groupSchedulingResource: '资源',
+  groupSchedulingShare: '目标占比：{{share}}%',
+  groupSchedulingWeight: '有效权重：{{weight}} · 偏好加成：+{{boost}}%',
+  groupSchedulingFactors: '额度系数：{{quota}} · 负载系数：{{load}}',
+  groupSchedulingUnsupported: '不支持额度观测，不按额度降低权重。',
+  groupSchedulingFallback:
+    '额度未知、不完整或已过期；启用动态加权时使用保守的降级系数。',
   updatesTitle: '软件更新',
   updatesDescription:
     '检查 SubLane 官方版本并更新当前实例。仅平台所有者可以安装更新。',

@@ -2,10 +2,11 @@ package gateway
 
 import (
 	"context"
-	"github.com/murongg/SubLane/internal/groups"
-	"github.com/murongg/SubLane/internal/upstream"
 	"math"
 	"testing"
+
+	"github.com/murongg/SubLane/internal/groups"
+	"github.com/murongg/SubLane/internal/upstream"
 )
 
 func TestSmoothSchedulerSpreadsWeightsAndIsolatesGroups(t *testing.T) {
@@ -152,5 +153,12 @@ func TestGroupSchedulingPreviewUsesSharedLoadAndLocalBoostsWithoutPlacement(t *t
 	preview, err := s.Scheduling(ctx, 1, group.ID, "synthetic-model")
 	if err != nil || len(preview.Weights) != 1 || preview.Weights[0].AccountID != second {
 		t.Fatal("shared saturation not filtered", preview, err)
+	}
+}
+
+func TestSchedulingFactorsExposeIncompleteQuotaFallback(t *testing.T) {
+	value := schedulingFactors(quotaDecision{State: "available"}, 0, 0, 10, true)
+	if value.QuotaState != "unknown" || value.QuotaFactor != .5 {
+		t.Fatal("incomplete quota must explain its fallback", value)
 	}
 }

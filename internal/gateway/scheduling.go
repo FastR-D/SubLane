@@ -99,6 +99,11 @@ type SchedulingWeight struct {
 }
 
 func schedulingFactors(quota quotaDecision, boost, inFlight, limit int64, dynamic bool) SchedulingWeight {
+	// Admission may know an account is available without enough observations to
+	// derive a remaining percentage. Diagnostics must expose that fallback.
+	if quota.State == "available" && quota.Weight == 0 {
+		quota.State = "unknown"
+	}
 	q, l := 1.0, 1.0
 	if dynamic {
 		switch {

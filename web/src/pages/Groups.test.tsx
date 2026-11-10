@@ -124,6 +124,7 @@ it('creates a pool with only selected accounts', async () => {
           name: 'Project alpha',
           enabled: true,
           resources: [{ kind: 'subscription', id: 'synthetic-account' }],
+          preference_boosts: { 'synthetic-account': 0 },
           routing: {
             preference: 'subscription_first',
             allow_api_fallback: false,
@@ -270,4 +271,148 @@ it('shows a renamed first pool and allows editing its name and enabled state', a
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(pool.name).toBe('Synthetic updated pool')
   expect(pool.enabled).toBe(false)
+})
+
+it('preserves group-local preference boosts, validates them and supports reset', async () => {
+  const saved: Record<string, unknown>[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/auth/state')
+        return Promise.resolve(response(authenticated))
+      if (url === '/api/accounts')
+        return Promise.resolve(response({ accounts: [account] }))
+      if (url === '/api/channels')
+        return Promise.resolve(response({ channels: [] }))
+      if (url === '/api/groups/1' && init?.method === 'PATCH') {
+        const input = JSON.parse(String(init.body))
+        saved.push(input)
+        return Promise.resolve(
+          response({
+            ...base,
+            ...input,
+            account_ids: [account.id],
+            allowed_models: [],
+          }),
+        )
+      }
+      if (url === '/api/groups/1')
+        return Promise.resolve(
+          response({
+            ...base,
+            account_ids: [account.id],
+            allowed_models: [],
+            preference_boosts: { [account.id]: 125 },
+          }),
+        )
+      return Promise.resolve(response({ groups: [base] }))
+    }),
+  )
+  render(
+    <App
+      router={createAppRouter(
+        createMemoryHistory({ initialEntries: ['/groups'] }),
+      )}
+    />,
+  )
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Edit Default' }))
+  const dialog = await screen.findByRole('dialog')
+  const input = await within(dialog).findByRole('spinbutton', {
+    name: 'Preference boost for Synthetic account (%)',
+  })
+  expect((input as HTMLInputElement).value).toBe('125')
+  await user.clear(input)
+  await user.type(input, '301')
+  await user.click(within(dialog).getByRole('button', { name: 'Save group' }))
+  expect(saved).toHaveLength(0)
+  expect(await within(dialog).findByRole('alert')).toBeTruthy()
+  await user.click(
+    within(dialog).getByRole('button', {
+      name: 'Reset preference boost for Synthetic account',
+    }),
+  )
+  expect((input as HTMLInputElement).value).toBe('0')
+  await user.type(input, '50')
+  await user.click(within(dialog).getByRole('button', { name: 'Save group' }))
+  await waitFor(() => expect(saved).toHaveLength(1))
+  expect(saved[0].preference_boosts).toEqual({ [account.id]: 50 })
+})
+
+it('previews model-specific scheduling and handles failure and empty results', async () => {
+  const preview = {
+    dynamic: true,
+    weights: [
+      {
+        account_id: account.id,
+        quota_state: 'stale',
+        quota_updated_at: 1,
+        quota_factor: 0.5,
+        load_factor: 1,
+        preference_boost: 100,
+        effective_weight: 1,
+        target_share: 1,
+        in_flight: 0,
+        max_concurrency: 10,
+      },
+    ],
+  }
+  let mode: 'ready' | 'failure' | 'empty' = 'ready'
+  const requests: string[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/auth/state')
+        return Promise.resolve(response(authenticated))
+      if (url === '/api/accounts')
+        return Promise.resolve(response({ accounts: [account] }))
+      if (url === '/api/channels')
+        return Promise.resolve(response({ channels: [] }))
+      if (url.startsWith('/api/groups/1/scheduling?')) {
+        requests.push(url)
+        return Promise.resolve(
+          mode === 'failure'
+            ? response({ error: 'unavailable' }, 503)
+            : response(
+                mode === 'empty' ? { ...preview, weights: [] } : preview,
+              ),
+        )
+      }
+      return Promise.resolve(response({ groups: [base] }))
+    }),
+  )
+  render(
+    <App
+      router={createAppRouter(
+        createMemoryHistory({ initialEntries: ['/groups'] }),
+      )}
+    />,
+  )
+  const user = userEvent.setup()
+  await user.click(
+    await screen.findByRole('button', { name: 'Scheduling for Default' }),
+  )
+  const dialog = await screen.findByRole('dialog')
+  expect(await within(dialog).findByText('Target share: 100%')).toBeTruthy()
+  expect(within(dialog).getByText('Synthetic account')).toBeTruthy()
+  expect(within(dialog).getByText(/Quota is unknown/)).toBeTruthy()
+  await user.type(
+    within(dialog).getByRole('textbox', { name: /Model/ }),
+    'gpt-test',
+  )
+  await user.click(within(dialog).getByRole('button', { name: 'Refresh' }))
+  await waitFor(() =>
+    expect(requests).toContain('/api/groups/1/scheduling?model=gpt-test'),
+  )
+  mode = 'empty'
+  await user.click(within(dialog).getByRole('button', { name: 'Refresh' }))
+  expect(
+    await within(dialog).findByText('No eligible resource for this selection.'),
+  ).toBeTruthy()
+  mode = 'failure'
+  await user.click(within(dialog).getByRole('button', { name: 'Refresh' }))
+  expect(
+    await within(dialog).findByRole('alert', {}, { timeout: 10000 }),
+  ).toBeTruthy()
+  expect(within(dialog).queryByText('Target share: 100%')).toBeNull()
 })

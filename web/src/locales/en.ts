@@ -1,4 +1,31 @@
 export const en = {
+  groupPreferenceBoost: 'Preference boost',
+  groupPreferenceBoostHint:
+    'Increase this group’s calculated preference by 0–300%. 100% doubles the weight. Existing conversations keep their account; boosts cannot bypass limits.',
+  groupBoostFor: 'Preference boost for {{name}} (%)',
+  groupBoostReset: 'Reset preference boost for {{name}}',
+  groupBoostInvalid: 'Enter a whole percentage from 0 to 300.',
+  groupBoostResetAction: 'Reset',
+  groupScheduling: 'Scheduling',
+  groupSchedulingFor: 'Scheduling for {{name}}',
+  groupSchedulingDescription:
+    'Snapshot for new Responses conversations before key allowance checks and parent preferences. Existing conversations stay bound. Shared accounts use combined capacity across groups.',
+  groupSchedulingModel: 'Model (optional; empty skips model capability checks)',
+  groupSchedulingFailed: 'Could not load scheduling. Refresh to try again.',
+  groupSchedulingDynamic:
+    'Dynamic quota and load weighting is enabled. Percentages describe new placement, not reserved quota.',
+  groupSchedulingStatic:
+    'Dynamic weighting is disabled. Placement uses smooth rotation and group preference boosts.',
+  groupSchedulingEmpty: 'No eligible resource for this selection.',
+  groupSchedulingResource: 'Resource',
+  groupSchedulingShare: 'Target share: {{share}}%',
+  groupSchedulingWeight:
+    'Effective weight: {{weight}} · Preference boost: +{{boost}}%',
+  groupSchedulingFactors: 'Quota factor: {{quota}} · Load factor: {{load}}',
+  groupSchedulingUnsupported:
+    'Quota is unsupported; no quota-based reduction applies.',
+  groupSchedulingFallback:
+    'Quota is unknown, incomplete or stale; a conservative fallback applies when dynamic weighting is enabled.',
   updatesTitle: 'Software updates',
   updatesDescription:
     'Check official SubLane releases and update this instance. Only the platform owner can install updates.',
