@@ -72,6 +72,7 @@ it('configures a specific personal key from its permitted model catalog', async 
   )
   const user = userEvent.setup()
   open()
+  await screen.findByRole('heading', { name: 'API keys' })
   const ccSwitch = await screen.findByRole('button', {
     name: 'Import Synthetic laptop into CC Switch',
   })

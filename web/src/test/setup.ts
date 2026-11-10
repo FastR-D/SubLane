@@ -1,6 +1,9 @@
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 import { i18n } from '@/lib/i18n'
+
+// Allow cold lazy routes to settle while race tests share the local CPU budget.
+configure({ asyncUtilTimeout: 3000 })
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

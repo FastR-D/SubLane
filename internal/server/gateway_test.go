@@ -189,7 +189,8 @@ func TestGatewayLargeRequests(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer conn.Close()
-		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+		// Race instrumentation can take over 15 seconds to validate this 8 MiB body.
+		conn.SetReadDeadline(time.Now().Add(time.Minute))
 		if err := conn.WriteJSON(map[string]any{"type": "response.create", "model": "synthetic-model", "instructions": prompt, "input": []any{}}); err != nil {
 			t.Fatal(err)
 		}

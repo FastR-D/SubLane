@@ -116,4 +116,6 @@ it.each([
         .disabled,
     ).toBe(true)
   },
+  // The 100-key page mounts hundreds of action controls in JSDOM.
+  15_000,
 )
