@@ -162,3 +162,64 @@ func TestSchedulingFactorsExposeIncompleteQuotaFallback(t *testing.T) {
 		t.Fatal("incomplete quota must explain its fallback", value)
 	}
 }
+
+func TestSchedulingAdaptsNewWorkWhileBusyConversationStaysBound(t *testing.T) {
+	s, bound, other := reviewGateway(t)
+	ctx := context.Background()
+	s.policy.QuotaWeighted = true
+	if err := s.loadRuntime(ctx); err != nil {
+		t.Fatal(err)
+	}
+	observe := func(id string, used float64) {
+		saveProviderQuota(t, s, id, upstream.Usage{UpdatedAt: s.now().Unix(), Limits: []upstream.UsageLimit{{Windows: []upstream.UsageWindow{{UsedPercent: quotaFloat(used)}}}}})
+	}
+	observe(bound, 20)
+	observe(other, 20)
+	place := func() string {
+		id, _, err := s.selectAccount(ctx, 1, 1, "", "", "synthetic-model", Responses)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	initial := map[string]int{}
+	for range 40 {
+		initial[place()]++
+	}
+	if initial[bound] != 20 || initial[other] != 20 {
+		t.Fatal("equal resources did not share new work", initial)
+	}
+	// A busy existing conversation consumes most of one account's slots and
+	// quota. New short requests should adapt without moving that conversation.
+	counts := map[string]int{}
+	for tick := range 120 {
+		if tick%10 == 0 {
+			observe(bound, 80+float64(tick/10))
+		}
+		state := s.health[bound]
+		state.InFlight = state.MaxConcurrency * int64(2+tick%2) / 4
+		id, _, err := s.selectAccount(ctx, 1, 1, "synthetic-parent", "", "synthetic-model", Responses)
+		if err != nil || id != bound {
+			t.Fatal("busy conversation moved", id, bound, err)
+		}
+		counts[place()]++
+	}
+	if counts[other] < 95 || counts[bound] == 0 {
+		t.Fatal("feedback did not favor available quota without starvation", counts)
+	}
+	// A genuine refreshed quota reset and completed requests restore equal
+	// placement; a low historical balance must not permanently penalize it.
+	s.health[bound].InFlight = 0
+	observe(bound, 20)
+	reset := map[string]int{}
+	for range 80 {
+		reset[place()]++
+	}
+	if math.Abs(float64(reset[bound]-reset[other])) > 2 {
+		t.Fatal("placement failed to recover after quota reset", reset)
+	}
+	var bindings int
+	if err := s.db.QueryRow("SELECT count(*) FROM account_affinity").Scan(&bindings); err != nil || bindings != 1 {
+		t.Fatal("sessionless work created bindings", bindings, err)
+	}
+}
