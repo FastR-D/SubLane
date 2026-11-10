@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/murongg/SubLane/internal/upstream"
 )
@@ -62,6 +63,34 @@ func TestSchedulingHistoryPersistsObservationsAndPreviewIsPure(t *testing.T) {
 	}
 }
 
+func TestSchedulingCyclesRequireObservedResetRatherThanRollingEstimate(t *testing.T) {
+	s, id, _ := reviewGateway(t)
+	s.scheduling = schedulingCollector{}
+	now := time.Now().Unix()
+	s.now = func() time.Time { return time.Unix(now, 0) }
+	ctx := context.Background()
+	observe := func(used float64, reset int64) {
+		s.recordSchedulingQuota(id, 0, upstream.Usage{UpdatedAt: now, Limits: []upstream.UsageLimit{{Windows: []upstream.UsageWindow{{Kind: "primary", UsedPercent: quotaFloat(used), WindowSeconds: quotaInt(3600), ResetAt: quotaInt(reset)}}}}})
+		if err := s.flushScheduling(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reset := now + 60
+	observe(50, reset)
+	now += 10
+	observe(45, reset+30)
+	h, err := s.SchedulingHistory(ctx, 1, 1, 24, id)
+	if err != nil || len(h.Cycles) != 0 {
+		t.Fatal(h.Cycles, err)
+	}
+	now = reset + 31
+	observe(5, reset+3630)
+	h, err = s.SchedulingHistory(ctx, 1, 1, 24, id)
+	if err != nil || len(h.Cycles) != 1 || h.Cycles[0].Remaining != 55 || h.Cycles[0].Complete {
+		t.Fatal(h.Cycles, err)
+	}
+}
+
 func TestSchedulingAccountUsageSettlesOnce(t *testing.T) {
 	s, _, _ := reviewGateway(t)
 	ctx := context.Background()
@@ -87,7 +116,7 @@ func TestSchedulingAccountUsageSettlesOnce(t *testing.T) {
 func TestSchedulingCollectorIsBoundedAndKeepsHiddenQuotaPrivate(t *testing.T) {
 	s, id, _ := reviewGateway(t)
 	s.scheduling = schedulingCollector{}
-	s.recordSchedulingQuota(id, 1, upstream.Usage{UpdatedAt: s.now().Unix(), Limits: []upstream.UsageLimit{{Hidden: true, Name: "internal", Windows: []upstream.UsageWindow{{Kind: "primary", UsedPercent: quotaFloat(40)}}}}})
+	s.recordSchedulingQuota(id, 0, upstream.Usage{UpdatedAt: s.now().Unix(), Limits: []upstream.UsageLimit{{Hidden: true, Name: "internal", Windows: []upstream.UsageWindow{{Kind: "primary", UsedPercent: quotaFloat(40)}}}}})
 	if s.scheduling.pendingCount() != 0 {
 		t.Fatal("hidden history exposed")
 	}
@@ -96,5 +125,38 @@ func TestSchedulingCollectorIsBoundedAndKeepsHiddenQuotaPrivate(t *testing.T) {
 	}
 	if s.scheduling.pendingCount() > maxSchedulingPending || s.scheduling.dropped == 0 {
 		t.Fatal("unbounded collector")
+	}
+}
+
+func TestSchedulingCyclePersistsCompleteObservedWindow(t *testing.T) {
+	s, id, _ := reviewGateway(t)
+	s.scheduling = schedulingCollector{}
+	now := time.Now().Unix() / 300 * 300
+	s.now = func() time.Time { return time.Unix(now, 0) }
+	ctx := context.Background()
+	start := now
+	reset := start + 3600
+	observe := func(used float64, next int64) {
+		s.recordSchedulingQuota(id, 0, upstream.Usage{UpdatedAt: now, Limits: []upstream.UsageLimit{{Windows: []upstream.UsageWindow{{Kind: "primary", UsedPercent: quotaFloat(used), WindowSeconds: quotaInt(3600), ResetAt: quotaInt(next)}}}}})
+		if err := s.flushScheduling(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := int64(0); i < 12; i++ {
+		now = start + i*300
+		observe(float64(i)*5, reset)
+	}
+	now = reset - 1
+	observe(70, reset)
+	now = reset + 1
+	observe(1, reset+3600)
+	h, err := s.SchedulingHistory(ctx, 1, 1, 24, id)
+	if err != nil || len(h.Cycles) != 1 || !h.Cycles[0].Complete || h.Cycles[0].Remaining != 30 || h.Evaluation.CompleteCycles != 1 {
+		t.Fatal(h.Cycles, h.Evaluation, err)
+	}
+	observe(1, reset+3600)
+	h, err = s.SchedulingHistory(ctx, 1, 1, 24, id)
+	if err != nil || len(h.Cycles) != 1 {
+		t.Fatal("reset recorded twice", h.Cycles, err)
 	}
 }

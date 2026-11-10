@@ -56,6 +56,13 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	if err != nil {
 		return "", digest, err
 	}
+	activePolicy := schedulingPolicy
+	if draft, ok := ctx.Value(schedulingDraftKey{}).(groups.SchedulingPolicy); ok {
+		if draft.Revision != schedulingPolicy.Revision {
+			return "", digest, groups.ErrSchedulingConflict
+		}
+		schedulingPolicy = draft
+	}
 	if preview, ok := ctx.Value(schedulingPreviewKey{}).(*SchedulingPreview); ok {
 		preview.Policy = schedulingPolicy
 	}
@@ -407,6 +414,9 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		route.Strategy = "quota_weighted"
 	}
 	if preview, ok := ctx.Value(schedulingPreviewKey{}).(*SchedulingPreview); ok {
+		if _, draft := ctx.Value(schedulingDraftKey{}).(groups.SchedulingPolicy); draft {
+			_, preview.Baseline = s.candidateWeights(candidates, snapshots, model, activePolicy)
+		}
 		preview.Weights = details
 		return candidates[0], digest, nil
 	}

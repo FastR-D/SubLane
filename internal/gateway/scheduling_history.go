@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -166,12 +167,21 @@ func (s *Service) collectScheduling(ctx context.Context) error {
 func (s *Service) flushScheduling(ctx context.Context) (err error) {
 	c := &s.scheduling
 	c.mu.Lock()
-	batch := make(map[string]SchedulingSample)
-	for k, v := range c.pending {
-		if len(batch) >= 500 {
-			break
+	// Drain oldest observations first so a reset cannot overtake its prior window.
+	keys := make([]string, 0, len(c.pending))
+	for k := range c.pending {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := c.pending[keys[i]], c.pending[keys[j]]
+		if a.ObservedAt == b.ObservedAt {
+			return keys[i] < keys[j]
 		}
-		batch[k] = v
+		return a.ObservedAt < b.ObservedAt
+	})
+	batch := make([]SchedulingSample, 0, min(500, len(keys)))
+	for _, k := range keys[:min(500, len(keys))] {
+		batch = append(batch, c.pending[k])
 		delete(c.pending, k)
 	}
 	dropped := c.dropped
@@ -194,6 +204,11 @@ func (s *Service) flushScheduling(ctx context.Context) (err error) {
 	defer tx.Rollback()
 	q := s.queries.WithTx(tx)
 	for _, v := range batch {
+		if v.Kind == "quota" {
+			if e := s.recordSchedulingCycle(ctx, q, v); e != nil {
+				return e
+			}
+		}
 		raw, e := q.GetSchedulingSample(ctx, db.GetSchedulingSampleParams{TenantID: s.tenantID, AccountID: v.AccountID, GroupID: v.GroupID, Bucket: v.Bucket, Kind: v.Kind, Scope: v.storageScope(), Revision: v.Revision})
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return e
@@ -236,17 +251,19 @@ type SchedulingUsage struct {
 	FirstOutputReported int64  `json:"first_output_reported"`
 }
 type SchedulingHistory struct {
-	AsOf           int64              `json:"as_of"`
-	CollectedSince int64              `json:"collected_since"`
-	LastFlush      int64              `json:"last_flush"`
-	Dropped        int64              `json:"dropped"`
-	Truncated      bool               `json:"truncated"`
-	Samples        []SchedulingSample `json:"samples"`
-	Usage          []SchedulingUsage  `json:"usage"`
+	AsOf           int64                `json:"as_of"`
+	CollectedSince int64                `json:"collected_since"`
+	LastFlush      int64                `json:"last_flush"`
+	Dropped        int64                `json:"dropped"`
+	Truncated      bool                 `json:"truncated"`
+	Samples        []SchedulingSample   `json:"samples"`
+	Usage          []SchedulingUsage    `json:"usage"`
+	Cycles         []SchedulingCycle    `json:"cycles"`
+	Evaluation     SchedulingEvaluation `json:"evaluation"`
 }
 
 func (s *Service) SchedulingHistory(ctx context.Context, userID, groupID, hours int64, accountID string) (SchedulingHistory, error) {
-	result := SchedulingHistory{AsOf: s.now().Unix(), Samples: []SchedulingSample{}, Usage: []SchedulingUsage{}}
+	result := SchedulingHistory{AsOf: s.now().Unix(), Samples: []SchedulingSample{}, Usage: []SchedulingUsage{}, Cycles: []SchedulingCycle{}}
 	if hours < 1 || hours > 90*24 || len(accountID) > 32 || strings.ContainsAny(accountID, "\r\n") {
 		return result, upstream.ErrInput
 	}
@@ -293,6 +310,18 @@ func (s *Service) SchedulingHistory(ctx context.Context, userID, groupID, hours 
 	for _, v := range usage {
 		result.Usage = append(result.Usage, SchedulingUsage{v.AccountID, v.Hour, v.Requests, v.Completed, v.Errors, v.Limited, v.DurationMs, v.WaitMs, v.InputTokens, v.OutputTokens, v.InputReported, v.OutputReported, v.FirstOutputMs, v.FirstOutputReported})
 	}
+	cycles, err := q.ListSchedulingCycles(ctx, db.ListSchedulingCyclesParams{TenantID: s.tenantID, Since: since, GroupID: groupID, AccountID: accountID})
+	if err != nil {
+		return result, err
+	}
+	if len(cycles) > 499 {
+		result.Truncated = true
+		cycles = cycles[:499]
+	}
+	for _, v := range cycles {
+		result.Cycles = append(result.Cycles, SchedulingCycle{AccountID: v.AccountID, Lifecycle: v.Lifecycle, Scope: v.Scope, ResetAt: v.ResetAt, WindowSeconds: v.WindowSeconds, Remaining: v.Remaining, ObservationAge: v.ObservationAge, Observations: v.Observations, Complete: v.Complete == 1, PolicyRevision: v.PolicyRevision})
+	}
+	result.Evaluation = evaluateScheduling(result)
 	return result, tx.Commit()
 }
 

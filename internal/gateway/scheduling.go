@@ -155,6 +155,7 @@ func (s *Service) candidateWeights(candidates []string, snapshots map[string]db.
 }
 
 type SchedulingPreview struct {
+	Baseline  []SchedulingWeight      `json:"baseline,omitempty"`
 	Resources []SchedulingResource    `json:"resources"`
 	AsOf      int64                   `json:"as_of"`
 	Policy    groups.SchedulingPolicy `json:"policy"`
@@ -162,6 +163,15 @@ type SchedulingPreview struct {
 	Weights   []SchedulingWeight      `json:"weights"`
 	Route     *RouteExplanation       `json:"route"`
 }
+type schedulingDraftKey struct{}
+
+func (s *Service) PreviewSchedulingPolicy(ctx context.Context, userID, groupID int64, model string, p groups.SchedulingPolicy) (SchedulingPreview, error) {
+	if !p.Valid() {
+		return SchedulingPreview{}, upstream.ErrInput
+	}
+	return s.Scheduling(context.WithValue(ctx, schedulingDraftKey{}, p), userID, groupID, model)
+}
+
 type SchedulingResource struct {
 	AccountID      string `json:"account_id"`
 	State          string `json:"state"`

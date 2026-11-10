@@ -122,3 +122,29 @@ func TestResetPlacementPrefersNearWindowWithoutMovingBindings(t *testing.T) {
 		}
 	}
 }
+
+func TestResetDraftUsesSameSnapshotAndRejectsStaleRevision(t *testing.T) {
+	s, near, _ := reviewGateway(t)
+	ctx := context.Background()
+	s.policy.QuotaWeighted = true
+	now := s.now().Unix()
+	saveProviderQuota(t, s, near, upstream.Usage{UpdatedAt: now, Limits: []upstream.UsageLimit{{Windows: []upstream.UsageWindow{{Kind: "primary", UsedPercent: quotaFloat(40), WindowSeconds: quotaInt(14400), ResetAt: quotaInt(now + 1800)}}}}})
+	p := groups.DefaultSchedulingPolicy()
+	p.Enabled = true
+	before := s.scheduler.clock
+	draft, err := s.PreviewSchedulingPolicy(ctx, 1, 1, "synthetic-model", p)
+	if err != nil || len(draft.Baseline) != 2 || s.scheduler.clock != before {
+		t.Fatal(draft, err)
+	}
+	for i, w := range draft.Weights {
+		if w.AccountID == near && w.EffectiveWeight != draft.Baseline[i].EffectiveWeight*1.25 {
+			t.Fatal("draft and baseline snapshots differ", draft)
+		}
+	}
+	if _, err := groups.New(s.db).SaveSchedulingPolicy(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PreviewSchedulingPolicy(ctx, 1, 1, "synthetic-model", p); !errors.Is(err, groups.ErrSchedulingConflict) {
+		t.Fatal("stale preview", err)
+	}
+}

@@ -114,3 +114,37 @@ func TestSchedulingPreviewIsAdministratorOnlyAndDoesNotExecute(t *testing.T) {
 		t.Fatal(result.Code)
 	}
 }
+
+func TestSchedulingDraftAndHistoryProtectAdministratorBoundary(t *testing.T) {
+	f := newForwardFixture(t, func(http.ResponseWriter, *http.Request) { t.Fatal("diagnostics contacted upstream") })
+	h := f.server.Config.Handler
+	login := func(name, password string) *http.Cookie {
+		return request(h, "POST", "/api/auth/login", "http://example.test", map[string]string{"username": name, "password": password}, nil).Result().Cookies()[0]
+	}
+	owner := login("owner-test", "owner pass 42")
+	member := login("member-test", "member pass 42")
+	p := groups.DefaultSchedulingPolicy()
+	body := map[string]any{"model": "synthetic-model", "policy": p}
+	for _, tc := range []struct {
+		cookie *http.Cookie
+		code   int
+	}{{nil, 401}, {member, 403}, {owner, 200}} {
+		r := request(h, "POST", "/api/groups/1/scheduling/preview", "http://example.test", body, tc.cookie)
+		if r.Code != tc.code {
+			t.Fatal(r.Code, r.Body.String())
+		}
+		r = request(h, "GET", "/api/groups/1/scheduling/history?hours=24", "", nil, tc.cookie)
+		if r.Code != tc.code {
+			t.Fatal(r.Code, r.Body.String())
+		}
+	}
+	if r := request(h, "GET", "/api/groups/1/scheduling/history?hours=2161", "", nil, owner); r.Code != 400 {
+		t.Fatal(r.Code, r.Body.String())
+	}
+	if r := request(h, "PUT", "/api/groups/scheduling-policy", "http://example.test", p, owner); r.Code != 200 {
+		t.Fatal(r.Code)
+	}
+	if r := request(h, "POST", "/api/groups/1/scheduling/preview", "http://example.test", body, owner); r.Code != 409 {
+		t.Fatal(r.Code, r.Body.String())
+	}
+}

@@ -36,7 +36,31 @@ FROM scheduling_usage WHERE tenant_id=sqlc.arg(tenant_id) AND group_id=sqlc.arg(
 AND (sqlc.arg(account_id)='' OR account_id=sqlc.arg(account_id)) ORDER BY hour DESC,account_id LIMIT 2001;
 
 -- name: PruneSchedulingSamples :execrows
-DELETE FROM scheduling_samples WHERE rowid IN (SELECT old.rowid FROM scheduling_samples old WHERE old.bucket < CASE WHEN old.kind='placement' THEN sqlc.arg(long_before) ELSE sqlc.arg(short_before) END LIMIT 500);
+DELETE FROM scheduling_samples WHERE rowid IN (SELECT old.rowid FROM scheduling_samples old WHERE old.bucket<sqlc.arg(short_before) AND (old.kind!='placement' OR old.bucket<sqlc.arg(long_before)) LIMIT 500);
 
 -- name: PruneSchedulingUsage :execrows
 DELETE FROM scheduling_usage WHERE rowid IN (SELECT old.rowid FROM scheduling_usage old WHERE old.hour < sqlc.arg(before_hour) LIMIT 500);
+
+-- name: PreviousSchedulingQuota :one
+SELECT payload FROM scheduling_samples WHERE tenant_id=? AND account_id=? AND kind='quota' AND revision=? AND observed_at<? AND json_extract(payload,'$.scope')=? ORDER BY observed_at DESC LIMIT 1;
+
+-- name: SchedulingWindowCoverage :one
+SELECT count(*) AS observations,CAST(COALESCE(MIN(observed_at),0) AS INTEGER) AS first_at FROM scheduling_samples
+WHERE tenant_id=? AND account_id=? AND kind='quota' AND revision=? AND scope=?;
+
+-- name: SchedulingWindowPolicy :one
+SELECT CAST(COALESCE(MAX(revision),0) AS INTEGER) AS revision,
+CAST(COALESCE(SUM(CASE WHEN created_at>=sqlc.arg(start_at) THEN 1 ELSE 0 END),0) AS INTEGER) AS changes
+FROM scheduling_revisions WHERE tenant_id=sqlc.arg(tenant_id) AND created_at<=sqlc.arg(reset_at);
+
+-- name: InsertSchedulingCycle :exec
+INSERT OR IGNORE INTO scheduling_cycles(tenant_id,account_id,scope,lifecycle,reset_at,window_seconds,remaining,observation_age,observations,complete,policy_revision) VALUES(?,?,?,?,?,?,?,?,?,?,?);
+
+-- name: ListSchedulingCycles :many
+SELECT c.account_id,c.lifecycle,c.scope,c.reset_at,c.window_seconds,c.remaining,c.observation_age,c.observations,c.complete,c.policy_revision
+FROM scheduling_cycles c WHERE c.tenant_id=sqlc.arg(tenant_id) AND c.reset_at>=sqlc.arg(since)
+AND EXISTS(SELECT 1 FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id WHERE ga.group_id=sqlc.arg(group_id) AND ga.account_id=c.account_id AND c.lifecycle=a.models_revision+a.usage_revision)
+AND (sqlc.arg(account_id)='' OR c.account_id=sqlc.arg(account_id)) ORDER BY c.reset_at DESC LIMIT 500;
+
+-- name: PruneSchedulingCycles :execrows
+DELETE FROM scheduling_cycles WHERE rowid IN (SELECT old.rowid FROM scheduling_cycles old WHERE old.reset_at<sqlc.arg(before_time) LIMIT 500);

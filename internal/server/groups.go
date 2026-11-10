@@ -35,6 +35,7 @@ func (h *groupHTTP) register(router chi.Router) {
 	router.Get("/{id}/members", h.poolMembers)
 	router.Get("/{id}/models", h.catalog)
 	router.Get("/{id}/scheduling", h.scheduling)
+	router.Post("/{id}/scheduling/preview", h.previewSchedulingPolicy)
 	router.Get("/{id}/scheduling/history", h.schedulingHistory)
 	router.Get("/{id}/models/availability", h.availability)
 	router.Patch("/{id}", h.update)
@@ -295,4 +296,37 @@ func (h *groupHTTP) schedulingHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, value)
+}
+
+func (h *groupHTTP) previewSchedulingPolicy(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil || id <= 0 {
+		groupError(w, groups.ErrInput)
+		return
+	}
+	if h.gateway == nil {
+		writeJSON(w, 503, map[string]string{"error": "unavailable"})
+		return
+	}
+	if _, err = h.service.Get(r.Context(), id); err != nil {
+		groupError(w, err)
+		return
+	}
+	var input struct {
+		Model  string                  `json:"model"`
+		Policy groups.SchedulingPolicy `json:"policy"`
+	}
+	if !decodeJSONLimit(w, r, &input, 4096) {
+		return
+	}
+	v, err := h.gateway.PreviewSchedulingPolicy(r.Context(), sessionUser(r).ID, id, input.Model, input.Policy)
+	if errors.Is(err, groups.ErrSchedulingConflict) {
+		writeJSON(w, 409, map[string]string{"error": "scheduling_policy_conflict"})
+		return
+	}
+	if err != nil {
+		gatewayError(w, err)
+		return
+	}
+	writeJSON(w, 200, v)
 }

@@ -55,6 +55,107 @@ func (q *Queries) GetSchedulingSample(ctx context.Context, arg GetSchedulingSamp
 	return payload, err
 }
 
+const insertSchedulingCycle = `-- name: InsertSchedulingCycle :exec
+INSERT OR IGNORE INTO scheduling_cycles(tenant_id,account_id,scope,lifecycle,reset_at,window_seconds,remaining,observation_age,observations,complete,policy_revision) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+`
+
+type InsertSchedulingCycleParams struct {
+	TenantID       int64
+	AccountID      string
+	Scope          string
+	Lifecycle      int64
+	ResetAt        int64
+	WindowSeconds  int64
+	Remaining      float64
+	ObservationAge int64
+	Observations   int64
+	Complete       int64
+	PolicyRevision int64
+}
+
+func (q *Queries) InsertSchedulingCycle(ctx context.Context, arg InsertSchedulingCycleParams) error {
+	_, err := q.db.ExecContext(ctx, insertSchedulingCycle,
+		arg.TenantID,
+		arg.AccountID,
+		arg.Scope,
+		arg.Lifecycle,
+		arg.ResetAt,
+		arg.WindowSeconds,
+		arg.Remaining,
+		arg.ObservationAge,
+		arg.Observations,
+		arg.Complete,
+		arg.PolicyRevision,
+	)
+	return err
+}
+
+const listSchedulingCycles = `-- name: ListSchedulingCycles :many
+SELECT c.account_id,c.lifecycle,c.scope,c.reset_at,c.window_seconds,c.remaining,c.observation_age,c.observations,c.complete,c.policy_revision
+FROM scheduling_cycles c WHERE c.tenant_id=?1 AND c.reset_at>=?2
+AND EXISTS(SELECT 1 FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id WHERE ga.group_id=?3 AND ga.account_id=c.account_id AND c.lifecycle=a.models_revision+a.usage_revision)
+AND (?4='' OR c.account_id=?4) ORDER BY c.reset_at DESC LIMIT 500
+`
+
+type ListSchedulingCyclesParams struct {
+	TenantID  int64
+	Since     int64
+	GroupID   int64
+	AccountID interface{}
+}
+
+type ListSchedulingCyclesRow struct {
+	AccountID      string
+	Lifecycle      int64
+	Scope          string
+	ResetAt        int64
+	WindowSeconds  int64
+	Remaining      float64
+	ObservationAge int64
+	Observations   int64
+	Complete       int64
+	PolicyRevision int64
+}
+
+func (q *Queries) ListSchedulingCycles(ctx context.Context, arg ListSchedulingCyclesParams) ([]ListSchedulingCyclesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSchedulingCycles,
+		arg.TenantID,
+		arg.Since,
+		arg.GroupID,
+		arg.AccountID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSchedulingCyclesRow{}
+	for rows.Next() {
+		var i ListSchedulingCyclesRow
+		if err := rows.Scan(
+			&i.AccountID,
+			&i.Lifecycle,
+			&i.Scope,
+			&i.ResetAt,
+			&i.WindowSeconds,
+			&i.Remaining,
+			&i.ObservationAge,
+			&i.Observations,
+			&i.Complete,
+			&i.PolicyRevision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSchedulingSamples = `-- name: ListSchedulingSamples :many
 SELECT s.payload FROM scheduling_samples s WHERE s.tenant_id=?1 AND s.bucket>=?2
 AND (s.group_id=?3 OR (s.group_id=0 AND EXISTS(SELECT 1 FROM group_accounts ga WHERE ga.group_id=?3 AND ga.account_id=s.account_id)))
@@ -186,17 +287,54 @@ func (q *Queries) MarkSchedulingCollection(ctx context.Context, arg MarkScheduli
 	return err
 }
 
+const previousSchedulingQuota = `-- name: PreviousSchedulingQuota :one
+SELECT payload FROM scheduling_samples WHERE tenant_id=? AND account_id=? AND kind='quota' AND revision=? AND observed_at<? AND json_extract(payload,'$.scope')=? ORDER BY observed_at DESC LIMIT 1
+`
+
+type PreviousSchedulingQuotaParams struct {
+	TenantID   int64
+	AccountID  string
+	Revision   int64
+	ObservedAt int64
+	Payload    string
+}
+
+func (q *Queries) PreviousSchedulingQuota(ctx context.Context, arg PreviousSchedulingQuotaParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, previousSchedulingQuota,
+		arg.TenantID,
+		arg.AccountID,
+		arg.Revision,
+		arg.ObservedAt,
+		arg.Payload,
+	)
+	var payload string
+	err := row.Scan(&payload)
+	return payload, err
+}
+
+const pruneSchedulingCycles = `-- name: PruneSchedulingCycles :execrows
+DELETE FROM scheduling_cycles WHERE rowid IN (SELECT old.rowid FROM scheduling_cycles old WHERE old.reset_at<?1 LIMIT 500)
+`
+
+func (q *Queries) PruneSchedulingCycles(ctx context.Context, beforeTime int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, pruneSchedulingCycles, beforeTime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const pruneSchedulingSamples = `-- name: PruneSchedulingSamples :execrows
-DELETE FROM scheduling_samples WHERE rowid IN (SELECT old.rowid FROM scheduling_samples old WHERE old.bucket < CASE WHEN old.kind='placement' THEN ?1 ELSE ?2 END LIMIT 500)
+DELETE FROM scheduling_samples WHERE rowid IN (SELECT old.rowid FROM scheduling_samples old WHERE old.bucket<?1 AND (old.kind!='placement' OR old.bucket<?2) LIMIT 500)
 `
 
 type PruneSchedulingSamplesParams struct {
-	LongBefore  int64
 	ShortBefore int64
+	LongBefore  int64
 }
 
 func (q *Queries) PruneSchedulingSamples(ctx context.Context, arg PruneSchedulingSamplesParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, pruneSchedulingSamples, arg.LongBefore, arg.ShortBefore)
+	result, err := q.db.ExecContext(ctx, pruneSchedulingSamples, arg.ShortBefore, arg.LongBefore)
 	if err != nil {
 		return 0, err
 	}
@@ -297,4 +435,57 @@ func (q *Queries) SaveSchedulingSample(ctx context.Context, arg SaveSchedulingSa
 		arg.Payload,
 	)
 	return err
+}
+
+const schedulingWindowCoverage = `-- name: SchedulingWindowCoverage :one
+SELECT count(*) AS observations,CAST(COALESCE(MIN(observed_at),0) AS INTEGER) AS first_at FROM scheduling_samples
+WHERE tenant_id=? AND account_id=? AND kind='quota' AND revision=? AND scope=?
+`
+
+type SchedulingWindowCoverageParams struct {
+	TenantID  int64
+	AccountID string
+	Revision  int64
+	Scope     string
+}
+
+type SchedulingWindowCoverageRow struct {
+	Observations int64
+	FirstAt      int64
+}
+
+func (q *Queries) SchedulingWindowCoverage(ctx context.Context, arg SchedulingWindowCoverageParams) (SchedulingWindowCoverageRow, error) {
+	row := q.db.QueryRowContext(ctx, schedulingWindowCoverage,
+		arg.TenantID,
+		arg.AccountID,
+		arg.Revision,
+		arg.Scope,
+	)
+	var i SchedulingWindowCoverageRow
+	err := row.Scan(&i.Observations, &i.FirstAt)
+	return i, err
+}
+
+const schedulingWindowPolicy = `-- name: SchedulingWindowPolicy :one
+SELECT CAST(COALESCE(MAX(revision),0) AS INTEGER) AS revision,
+CAST(COALESCE(SUM(CASE WHEN created_at>=?1 THEN 1 ELSE 0 END),0) AS INTEGER) AS changes
+FROM scheduling_revisions WHERE tenant_id=?2 AND created_at<=?3
+`
+
+type SchedulingWindowPolicyParams struct {
+	StartAt  int64
+	TenantID int64
+	ResetAt  int64
+}
+
+type SchedulingWindowPolicyRow struct {
+	Revision int64
+	Changes  int64
+}
+
+func (q *Queries) SchedulingWindowPolicy(ctx context.Context, arg SchedulingWindowPolicyParams) (SchedulingWindowPolicyRow, error) {
+	row := q.db.QueryRowContext(ctx, schedulingWindowPolicy, arg.StartAt, arg.TenantID, arg.ResetAt)
+	var i SchedulingWindowPolicyRow
+	err := row.Scan(&i.Revision, &i.Changes)
+	return i, err
 }
