@@ -246,6 +246,7 @@ export function Layout({ children }: { children?: ReactNode }) {
     [
       '/requests',
       '/admin/requests',
+      '/groups/scheduling',
       '/admin/audit',
       '/members',
       '/keys',
