@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/groups"
 	"github.com/murongg/SubLane/internal/upstream"
 )
@@ -71,8 +70,8 @@ func TestNativeRoutingRotatesFallbacksAndKeepsItsAccountAcrossRestart(t *testing
 	if _, err := s.accounts.SetEnabled(ctx, id, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := reopened.selectAccount(ctx, 1, 1, "synthetic-auto-session", "", "synthetic-model", Responses); !errors.Is(err, accounts.ErrDisabled) {
-		t.Fatal("disabled automatic binding moved", err)
+	if next, _, err := reopened.selectAccount(ctx, 1, 1, "synthetic-auto-session", "", "synthetic-model", Responses); err != nil || next == id {
+		t.Fatal("disabled automatic binding did not rebalance", next, err)
 	}
 }
 
@@ -98,12 +97,12 @@ func TestNativeRoutingAdoptsLegacyAffinityWithoutMovingIt(t *testing.T) {
 	if _, err := s.accounts.SetEnabled(ctx, ids["codex"], false); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.selectAccount(ctx, 1, 1, "synthetic-legacy", "", "synthetic-model", Responses); !errors.Is(err, accounts.ErrDisabled) {
-		t.Fatal("disabled legacy account moved", err)
+	if next, _, err := s.selectAccount(ctx, 1, 1, "synthetic-legacy", "", "synthetic-model", Responses); err != nil || next == id {
+		t.Fatal("disabled legacy account did not rebalance", next, err)
 	}
 }
 
-func TestNativeSelectionSkipsBusyAccountsButNeverMovesBoundSessions(t *testing.T) {
+func TestNativeSelectionRebalancesBusyBoundSessions(t *testing.T) {
 	s, ids := providerGateway(t, transportFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("synthetic") }))
 	ctx := context.Background()
 	first, _, err := s.selectAccount(ctx, 1, 1, "synthetic-busy-session", "", "synthetic-model", Responses)
@@ -115,8 +114,8 @@ func TestNativeSelectionSkipsBusyAccountsButNeverMovesBoundSessions(t *testing.T
 	if err != nil || next == first {
 		t.Fatal("new request chose busy account", next, err)
 	}
-	if _, _, err := s.selectAccount(ctx, 1, 1, "synthetic-busy-session", "", "synthetic-model", Responses); !errors.Is(err, ErrAccountBusy) {
-		t.Fatal("busy conversation moved", err)
+	if next, _, err := s.selectAccount(ctx, 1, 1, "synthetic-busy-session", "", "synthetic-model", Responses); err != nil || next == first {
+		t.Fatal("busy conversation did not rebalance", next, err)
 	}
 	s.health[first].InFlight = 0
 	if _, err := s.accounts.SetEnabled(ctx, ids["codex"], false); err != nil {

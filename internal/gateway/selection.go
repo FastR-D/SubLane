@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/allocations"
 	"github.com/murongg/SubLane/internal/groups"
+	"github.com/murongg/SubLane/internal/logging"
 	"github.com/murongg/SubLane/internal/storage/db"
 	"github.com/murongg/SubLane/internal/upstream"
 )
@@ -152,7 +154,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		return "", digest, ErrModelNotAllowed
 	}
 	scope := provider
-	// Automatic routing needs one binding across providers so a new catalog or cooldown cannot move a conversation.
+	// Automatic routing shares one binding across providers; usable bindings retain their account.
 	if scope == "" {
 		scope = "auto"
 	}
@@ -160,6 +162,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	expires := now + 24*3600
 	bindingModel := upstream.CatalogModelID(model)
 	var replacement *db.ListSessionAffinitiesRow
+	replacementReason := "model"
 	if session != "" {
 		existing, err := sessionBinding(ctx, q, db.ListSessionAffinitiesParams{GroupID: groupID, UserID: userID, SessionHash: digest[:], Now: now}, scope)
 		if err != nil {
@@ -190,8 +193,21 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 			if kind == Compact && bound.Provider != "codex" {
 				return id, digest, upstream.ErrInput
 			}
-			reselect := false
-			if model != "" && bound.Enabled && bound.Status != "reauth_required" {
+			admissionErr := s.accountAdmission(*bound)
+			if admissionErr == nil {
+				admissionErr = s.modelAdmission(ctx, q, id, model)
+			}
+			if admissionErr == nil {
+				admissionErr = quotaAdmission(*bound, model)
+			}
+			reselect := replaceUnavailableAffinity(admissionErr)
+			if admissionErr != nil && !reselect {
+				return id, digest, admissionErr
+			}
+			if reselect {
+				_, replacementReason, _ = classify(ctx, admissionErr)
+			}
+			if model != "" && !reselect {
 				// A model change alone does not change account identity. After a recorded
 				// account move, older opaque state must still stay off the new account.
 				if affinity == continuationAffinity && existing.Rebound && existing.Model != "" && bindingModel != existing.Model {
@@ -219,15 +235,6 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 				if model != "" && !policy.AllowsResource(bound.Provider, model) {
 					return id, digest, ErrModelNotAllowed
 				}
-				if err := s.accountAdmission(*bound); err != nil {
-					return id, digest, err
-				}
-				if err := s.modelAdmission(ctx, q, id, model); err != nil {
-					return id, digest, err
-				}
-				if err := quotaAdmission(*bound, model); err != nil {
-					return id, digest, err
-				}
 				if scheme != 0 {
 					if _, err := allocations.Check(ctx, q, scheme, userID, groupID, id, model, now, s.location()); err != nil {
 						return id, digest, err
@@ -252,7 +259,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 			}
 		}
 	}
-	// A portable model change resumes scheduling rather than retaining the previous binding.
+	// An unavailable binding and a portable model change use the same admission and weighted scheduler.
 	route.Strategy = "none"
 	route.ParentFallback = parentThread != "" && affinity != continuationAffinity
 	parentAccount := ""
@@ -385,25 +392,29 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		}
 	}
 	if len(candidates) == 0 {
+		rejectedAccount := ""
+		if replacement != nil {
+			rejectedAccount = replacement.AccountID
+		}
 		if allocationErr != nil {
-			return "", digest, allocationErr
+			return rejectedAccount, digest, allocationErr
 		}
 		if busy {
-			return "", digest, ErrAccountBusy
+			return rejectedAccount, digest, ErrAccountBusy
 		}
 		if cooling > 0 {
-			return "", digest, &CoolingError{RetryAfter: cooling, Model: coolingModel}
+			return rejectedAccount, digest, &CoolingError{RetryAfter: cooling, Model: coolingModel}
 		}
 		if quotaWait > 0 {
-			return "", digest, &QuotaError{RetryAfter: quotaWait}
+			return rejectedAccount, digest, &QuotaError{RetryAfter: quotaWait}
 		}
 		if unknown {
-			return "", digest, ErrCatalogUnavailable
+			return rejectedAccount, digest, ErrCatalogUnavailable
 		}
 		if eligible && model != "" {
-			return "", digest, ErrModelUnavailable
+			return rejectedAccount, digest, ErrModelUnavailable
 		}
-		return "", digest, ErrNoAccount
+		return rejectedAccount, digest, ErrNoAccount
 	}
 	route.Strategy = "rotation"
 	route.Candidates = min(maxRouteCount, len(candidates))
@@ -448,10 +459,23 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	if err := tx.Commit(); err != nil {
 		return "", digest, err
 	}
+	if replacement != nil {
+		logging.From(ctx).LogAttrs(ctx, slog.LevelInfo, "Gateway conversation reassigned",
+			slog.String("request_id", RequestID(ctx)), slog.Int64("tenant_id", s.tenantID),
+			slog.Int64("user_id", userID), slog.Int64("group_id", groupID),
+			slog.String("previous_account_id", replacement.AccountID), slog.String("account_id", id),
+			slog.String("reason", replacementReason), slog.String("strategy", route.Strategy))
+	}
 	if id != parentAccount {
 		s.recordSchedulingPlacement(groupID, cursor, schedulingPolicy.Revision, id, details)
 	}
 	return id, digest, nil
+}
+
+func replaceUnavailableAffinity(err error) bool {
+	return errors.Is(err, accounts.ErrDisabled) || errors.Is(err, accounts.ErrReauthorize) ||
+		errors.Is(err, ErrAccountCooling) || errors.Is(err, ErrModelCooling) ||
+		errors.Is(err, ErrAccountBusy) || errors.Is(err, ErrQuotaExhausted)
 }
 
 func preferredProvider(kind Kind) string {

@@ -35,7 +35,7 @@ export const en = {
   schedulingTarget: 'Target placement share',
   schedulingFactors: 'Weight factors',
   schedulingEquation:
-    'Quota × reset urgency × load × group preference. Existing conversations retain their account.',
+    'Quota × reset urgency × load × group preference. Accounts remain bound while available; unavailable accounts are replaced automatically.',
   schedulingTimingUnknown: 'No usable reset timing',
   schedulingResetFactor: 'Reset factor: {{factor}}×',
   schedulingEligible: 'Eligible',
@@ -78,7 +78,7 @@ export const en = {
 
   groupPreferenceBoost: 'Preference boost',
   groupPreferenceBoostHint:
-    'Increase this group’s calculated preference by 0–300%. 100% doubles the weight. Existing conversations keep their account; boosts cannot bypass limits.',
+    'Increase this group’s calculated preference by 0–300%. 100% doubles the weight. Accounts remain bound while available; unavailable accounts are replaced automatically.',
   groupBoostFor: 'Preference boost for {{name}} (%)',
   groupBoostReset: 'Reset preference boost for {{name}}',
   groupBoostInvalid: 'Enter a whole percentage from 0 to 300.',
@@ -86,7 +86,7 @@ export const en = {
   groupScheduling: 'Scheduling',
   groupSchedulingFor: 'Scheduling for {{name}}',
   groupSchedulingDescription:
-    'Snapshot for new Responses conversations before key allowance checks and parent preferences. Existing conversations stay bound. Shared accounts use combined capacity across groups.',
+    'Snapshot for new Responses conversations before key allowance checks and parent preferences. Shared accounts use combined capacity across groups. Accounts remain bound while available; unavailable accounts are replaced automatically.',
   groupSchedulingModel: 'Model (optional; empty skips model capability checks)',
   groupSchedulingFailed: 'Could not load scheduling. Refresh to try again.',
   groupSchedulingDynamic:
@@ -328,7 +328,7 @@ export const en = {
   availabilityCheck: 'Check status',
   availabilityChecking: 'Checking status…',
   availabilityHint:
-    'A local snapshot of eligibility for a new request. No generation is sent. Key, member and allocation limits still apply, and existing conversations keep their original resource.',
+    'A local snapshot for new requests. No generation is sent. Key, member and allocation limits still apply. Accounts remain bound while available; unavailable accounts are replaced automatically.',
   availabilityFailed: 'Could not update this snapshot. Check status again.',
   availabilityEligible: 'Eligible for a new request',
   availabilityUnknown: 'Availability unknown',
@@ -412,7 +412,7 @@ export const en = {
   recoveryModel:
     'Open this key’s client guide and choose a model from its available catalog. Ask your administrator if the required model is missing.',
   recoveryUpstream:
-    'Check the affected account’s connection, proxy, and cooldown status. Retry after recovery; an existing conversation stays on its original account.',
+    'Retry to select an available account. If retries fail, ask your administrator to check connectivity, permissions, cooldowns and quota.',
   alertsSaving: 'Saving…',
   recoveryAllocations: 'Review allocations',
   alertsTitle: 'Workspace alerts',
@@ -452,7 +452,7 @@ export const en = {
   recoveryContext:
     'Reduce the conversation context or start a new conversation in your client.',
   recoveryQuota:
-    'The subscription quota is exhausted. Check its reset time with your administrator. An existing conversation stays on its original account.',
+    'No eligible account is available. Check account status, permissions, cooldowns and quota with your administrator.',
   recoveryAdmin:
     'Open the relevant settings, check this request’s group and account, then ask the caller to retry after resolving the cause.',
   recoveryContact:
@@ -731,7 +731,7 @@ export const en = {
   reasonQuotaExhausted:
     'Subscription quota exhausted; retry after the next quota check.',
   accountQuotaRoutingHint:
-    'Fresh quota confirms exhaustion. New sessions use another available account; existing sessions keep their account.',
+    'Accounts remain bound while available; unavailable accounts are replaced automatically.',
 
   auditSettingsUpdate: 'Updated instance settings',
   auditSettings: 'Instance settings',

@@ -108,9 +108,14 @@ func TestGatewayKeepsAccountAffinityAndBoundsActiveRequests(t *testing.T) {
 	if _, err := service.SetEnabled(ctx, mapping[selected], false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gateway.Open(ctx, 1, 1, raw, headers, Responses); !errors.Is(err, accounts.ErrDisabled) {
-		t.Fatal("disabled conversation silently switched accounts", err)
+	replacement, err := gateway.Open(ctx, 1, 1, raw, headers, Responses)
+	if err != nil {
+		t.Fatal("disabled conversation did not rebalance", err)
 	}
+	if replacement.entry.record.AccountID == mapping[selected] {
+		t.Fatal("disabled account reused")
+	}
+	replacement.Body.Close()
 	headers.Set("Session_id", "new-conversation")
 	stream, err := gateway.Open(ctx, 1, 1, raw, headers, Responses)
 	if err != nil {

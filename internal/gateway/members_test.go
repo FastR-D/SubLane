@@ -85,6 +85,8 @@ func TestMemberLimitsShareKeysGroupsAndSurviveRestart(t *testing.T) {
 	now := time.Now().Truncate(time.Minute).Add(10 * time.Second)
 	s.now = func() time.Time { return now }
 	raw := []byte(`{"model":"synthetic-model","input":"synthetic"}`)
+	createAdmissionKey(t, s, 11, member, 1)
+	createAdmissionKey(t, s, 12, member, pool.ID)
 	first, err := s.Open(WithRequestIdentity(ctx, 11, "http"), member, 1, raw, nil, Responses)
 	if err != nil {
 		t.Fatal(err)

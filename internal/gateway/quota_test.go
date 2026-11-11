@@ -51,7 +51,7 @@ func TestQuotaDecisionOnlyUsesFreshMainLimits(t *testing.T) {
 	}
 }
 
-func TestQuotaSelectionPersistsAndNeverMovesStickyConversation(t *testing.T) {
+func TestQuotaSelectionPersistsAndRebalancesStickyConversation(t *testing.T) {
 	ctx := context.Background()
 	s, ids := codexGateway(t, transportFunc(func(*http.Request) (*http.Response, error) { return syntheticStream(), nil }))
 	first, _, err := s.selectAccount(ctx, 1, 1, "synthetic-sticky", "codex", "", Responses)
@@ -73,8 +73,8 @@ func TestQuotaSelectionPersistsAndNeverMovesStickyConversation(t *testing.T) {
 		t.Fatal("exhausted account was selected", chosen, err)
 	}
 	chosen, _, err = restarted.selectAccount(ctx, 1, 1, "synthetic-sticky", "codex", "", Responses)
-	if !errors.Is(err, ErrQuotaExhausted) || chosen != first {
-		t.Fatal("sticky quota changed binding", chosen, err)
+	if err != nil || chosen != second.ID {
+		t.Fatal("sticky quota did not rebalance", chosen, err)
 	}
 	saveExhaustedQuota(t, s, second.ID)
 	if _, _, err := restarted.selectAccount(ctx, 1, 1, "", "codex", "", Responses); !errors.Is(err, ErrQuotaExhausted) {

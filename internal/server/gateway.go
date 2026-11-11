@@ -264,6 +264,8 @@ func (h *keyHTTP) proxy(w http.ResponseWriter, r *http.Request, kind gateway.Kin
 		return controller.Flush()
 	}, heartbeat)
 	if err != nil {
+		// Settle failure and publish retry eligibility before the client sees the error.
+		result.Body.Close()
 		if r.Context().Err() != nil {
 			return
 		}

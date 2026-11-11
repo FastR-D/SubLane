@@ -147,8 +147,8 @@ func TestAffinityIsPartitionedByProviderAndPersists(t *testing.T) {
 	reopened := New(ctx, gateway.db, gateway.accounts, gateway.provider)
 	defer reopened.Close()
 	_, err := reopened.Open(ctx, 1, 1, []byte(`{"model":"claude/synthetic-model","input":"synthetic"}`), http.Header{"Session_id": {"same-session"}}, Responses)
-	if !errors.Is(err, accounts.ErrDisabled) {
-		t.Fatal("disabled provider binding moved", err)
+	if !errors.Is(err, ErrNoAccount) {
+		t.Fatal("disabled provider binding escaped its provider scope", err)
 	}
 	id, _, err := reopened.selectAccount(ctx, 1, 1, "same-session", "codex", "", Responses)
 	if err != nil || id != ids["codex"] {

@@ -36,7 +36,7 @@ export const zh: Record<keyof typeof en, string> = {
   schedulingTarget: '目标分配占比',
   schedulingFactors: '权重因子',
   schedulingEquation:
-    '额度 × 重置紧迫度 × 负载 × 组内偏好。已有会话保留原账号。',
+    '额度 × 重置紧迫度 × 负载 × 组内偏好。 账号可用时保留会话绑定；账号不可用时自动切换。',
   schedulingTimingUnknown: '无可用重置时间',
   schedulingResetFactor: '重置系数：{{factor}} 倍',
   schedulingEligible: '可参与分配',
@@ -78,7 +78,7 @@ export const zh: Record<keyof typeof en, string> = {
 
   groupPreferenceBoost: '偏好加成',
   groupPreferenceBoostHint:
-    '为本组计算出的偏好增加 0–300%。100% 表示权重翻倍。已有会话保留账号，加成不能绕过限制。',
+    '为本组计算出的偏好增加 0–300%。 100% 表示权重翻倍。 账号可用时保留会话绑定；账号不可用时自动切换。',
   groupBoostFor: '{{name}} 的偏好加成（%）',
   groupBoostReset: '重置 {{name}} 的偏好加成',
   groupBoostInvalid: '请输入 0 到 300 的整数百分比。',
@@ -86,7 +86,7 @@ export const zh: Record<keyof typeof en, string> = {
   groupScheduling: '调度',
   groupSchedulingFor: '{{name}} 的调度',
   groupSchedulingDescription:
-    '展示新 Responses 会话的当前分配，未计入 Key 额度检查和父任务偏好。已有会话保留绑定；共享账号的容量由各组共同使用。',
+    '展示新 Responses 会话的当前分配，未计入 Key 额度检查和父任务偏好。共享账号的容量由各组共同使用。 账号可用时保留会话绑定；账号不可用时自动切换。',
   groupSchedulingModel: '模型（可选；留空则不检查模型能力）',
   groupSchedulingFailed: '无法加载调度信息，请刷新重试。',
   groupSchedulingDynamic:
@@ -306,7 +306,7 @@ export const zh: Record<keyof typeof en, string> = {
   availabilityCheck: '检查状态',
   availabilityChecking: '正在检查状态…',
   availabilityHint:
-    '这是新请求准入条件的本地快照，不会发送生成请求。密钥、成员和用量分配限制仍然适用；已有对话保持原账号绑定。',
+    '新请求可用性的本地快照，不会发送生成请求。Key、成员和用量分配限制仍然适用。 账号可用时保留会话绑定；账号不可用时自动切换。',
   availabilityFailed: '无法更新状态快照，请重新检查。',
   availabilityEligible: '可接收新请求',
   availabilityUnknown: '可用状态未知',
@@ -383,7 +383,7 @@ export const zh: Record<keyof typeof en, string> = {
   recoveryModel:
     '打开此密钥的接入指南，从可用目录中选择模型；所需模型不在目录时，请联系管理员。',
   recoveryUpstream:
-    '检查对应账号的连接、出口代理和冷却状态，恢复后再重试；已有对话仍绑定原账号。',
+    '重试时会自动选择可用账号。若重试仍失败，请联系管理员检查连接、权限、冷却和额度。',
   alertsSaving: '保存中…',
   recoveryAllocations: '检查用量分配',
   alertsTitle: '工作空间告警',
@@ -418,7 +418,7 @@ export const zh: Record<keyof typeof en, string> = {
   recoveryWait: '请稍后重试。连续立即重试不会释放并发槽位或结束冷却。',
   recoveryContext: '在客户端缩短上下文，或开启新对话。',
   recoveryQuota:
-    '订阅额度已耗尽，请与管理员确认重置时间。已有对话仍绑定原账号。',
+    '当前没有符合条件的可用账号，请联系管理员检查账号状态、权限、冷却和额度。',
   recoveryAdmin:
     '打开对应设置，检查此请求的资源组与账号；处理原因后，再让调用者重试。',
   recoveryContact:
@@ -674,8 +674,7 @@ export const zh: Record<keyof typeof en, string> = {
   requestCopyFailed: '复制失败，可选中请求 ID 手动复制。',
   accountQuotaExhausted: '额度已耗尽',
   reasonQuotaExhausted: '订阅额度已耗尽，请在下次额度检查后重试。',
-  accountQuotaRoutingHint:
-    '最新额度确认已耗尽。新会话使用其他可用账号，已有会话保持原账号。',
+  accountQuotaRoutingHint: '账号可用时保留会话绑定；账号不可用时自动切换。',
 
   auditSettingsUpdate: '更新实例设置',
   auditSettings: '实例设置',

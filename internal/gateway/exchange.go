@@ -177,6 +177,7 @@ func (x *Exchange) Events(yield func([]byte) error) error {
 			}
 		} else {
 			x.outcome, x.code, x.penalty = classify(x.entry.ctx, err)
+			x.entry.streamFailure = explicitStreamFailure(err)
 		}
 	}
 	return err
@@ -224,7 +225,14 @@ func (x *Exchange) Fail(err error) {
 	defer x.mu.Unlock()
 	if !x.closed {
 		x.outcome, x.code, x.penalty = classify(x.entry.ctx, err)
+		x.entry.streamFailure = explicitStreamFailure(err)
 	}
+}
+
+func explicitStreamFailure(err error) bool {
+	var failure *upstream.UpstreamError
+	return errors.Is(err, upstream.ErrInterrupted) || errors.Is(err, upstream.ErrResponse) ||
+		errors.As(err, &failure) && failure.Status >= 500
 }
 func (x *Exchange) Complete(ctx context.Context, event []byte) []byte {
 	data := x.Stream.Complete(ctx, event)

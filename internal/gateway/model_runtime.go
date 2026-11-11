@@ -100,8 +100,10 @@ func (s *Service) finishModelRuntime(ctx context.Context, e *observation, outcom
 		next.failures = min(16, next.failures+1)
 		if e.modelLimited {
 			next.cooldownUntil = max(next.cooldownUntil, now.Unix()+retryDelay(retry, now, s.policy.RateLimitCooldown))
-		} else if next.failures >= s.policy.TransientThreshold {
-			delay := min(300, int64(s.policy.TransientCooldown.Seconds())<<min(4, next.failures-s.policy.TransientThreshold))
+		} else if e.retryAffinity || e.streamFailure || next.failures >= s.policy.TransientThreshold {
+			// Publish cooldown before releasing the failed stream so client retries
+			// can select another account without waiting for a failure streak.
+			delay := min(300, int64(s.policy.TransientCooldown.Seconds())<<min(4, max(0, next.failures-s.policy.TransientThreshold)))
 			next.cooldownUntil = max(next.cooldownUntil, now.Unix()+max(1, delay))
 		}
 		s.sequence++

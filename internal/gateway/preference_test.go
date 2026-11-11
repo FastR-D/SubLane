@@ -93,8 +93,8 @@ func TestProtocolPreferenceKeepsFallbackAffinityAfterRecoveryAndProtocolChange(t
 		t.Fatal("new request did not return to preferred provider", id, err)
 	}
 	s.health[bound].InFlight = s.health[bound].MaxConcurrency
-	if id, _, err := s.selectAccount(ctx, 1, 1, "synthetic-session", "", "synthetic-model", Responses); !errors.Is(err, ErrAccountBusy) || id != bound {
-		t.Fatal("busy binding moved", id, err)
+	if id, _, err := s.selectAccount(ctx, 1, 1, "synthetic-session", "", "synthetic-model", Responses); err != nil || id != ids["codex"] {
+		t.Fatal("busy binding did not use the preferred available account", id, err)
 	}
 }
 

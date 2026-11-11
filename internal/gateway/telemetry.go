@@ -10,8 +10,5 @@ func (s *Service) Pressure() (inFlight, queued int64) {
 	for _, state := range s.health {
 		inFlight += state.InFlight
 	}
-	for _, count := range s.waiting {
-		queued += int64(count)
-	}
 	return inFlight, queued
 }

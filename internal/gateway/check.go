@@ -156,7 +156,6 @@ func (s *Service) leaseModelCheck(ctx context.Context, id, model string) (func()
 		if modelState.inFlight == 0 && !modelState.persistFailed && s.modelHealth[modelState.key] == modelState {
 			delete(s.modelHealth, modelState.key)
 		}
-		s.notifyCapacity(id)
 		releaseSlot()
 		s.workers.Done()
 	}, nil

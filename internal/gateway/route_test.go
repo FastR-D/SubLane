@@ -211,9 +211,6 @@ func TestRouteExplanationCapturesNoSelectionAndBlockedBinding(t *testing.T) {
 			}
 			route := requestRoute(t, s, 0)
 			strategy := "none"
-			if session != "" {
-				strategy = "affinity"
-			}
 			if route["strategy"] != strategy || route["result"] != "rejected" || route["exclusions"].(map[string]any)["quota"] != float64(1) {
 				t.Fatalf("quota rejection not captured: %+v", route)
 			}

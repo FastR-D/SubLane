@@ -159,8 +159,8 @@ func TestReviewKeepsAnExistingChildBinding(t *testing.T) {
 	if x != nil {
 		x.Body.Close()
 	}
-	if !errors.Is(err, accounts.ErrDisabled) {
-		t.Fatal("unavailable child silently moved to its parent", parent, err)
+	if err != nil || x == nil || x.entry.record.AccountID != parent {
+		t.Fatal("unavailable child did not rebalance to eligible parent", parent, err)
 	}
 }
 

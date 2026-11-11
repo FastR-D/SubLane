@@ -44,36 +44,33 @@ const (
 func (k Kind) IsGemini() bool { return k == Gemini || k == GeminiStream }
 
 type Service struct {
-	scheduling         schedulingCollector
-	telemetry          *metrics.Collector
-	db                 *sql.DB
-	queries            *db.Queries
-	accounts           *accounts.Service
-	tenantID           int64
-	provider           *upstream.Client
-	slots              chan struct{}
-	mu                 sync.Mutex
-	scheduler          smoothScheduler
-	health             map[string]*Runtime
-	modelHealth        map[modelKey]*modelRuntime
-	memberActive       map[int64]int64
-	waiting            map[int64]int
-	capacityChanged    map[int64]chan struct{}
-	accountWaitTimeout time.Duration
-	policy             Policy
-	now                func() time.Time
-	runContext         context.Context
-	stopRuntime        context.CancelFunc
-	workers            sync.WaitGroup
-	closed             bool
-	allocationsReady   bool
-	failedSettlements  []*observation
-	sequence           int64
-	usage              *usageCache
-	catalog            *catalogCache
-	pricing            *pricing.Service
-	timeZone           *timezone.Service
-	content            *content.Service
+	scheduling        schedulingCollector
+	telemetry         *metrics.Collector
+	db                *sql.DB
+	queries           *db.Queries
+	accounts          *accounts.Service
+	tenantID          int64
+	provider          *upstream.Client
+	slots             chan struct{}
+	mu                sync.Mutex
+	scheduler         smoothScheduler
+	health            map[string]*Runtime
+	modelHealth       map[modelKey]*modelRuntime
+	memberActive      map[int64]int64
+	policy            Policy
+	now               func() time.Time
+	runContext        context.Context
+	stopRuntime       context.CancelFunc
+	workers           sync.WaitGroup
+	closed            bool
+	allocationsReady  bool
+	failedSettlements []*observation
+	sequence          int64
+	usage             *usageCache
+	catalog           *catalogCache
+	pricing           *pricing.Service
+	timeZone          *timezone.Service
+	content           *content.Service
 }
 
 func (s *Service) SetContent(rules *content.Service) { s.content = rules }
@@ -100,7 +97,7 @@ func NewForTenantWithPolicy(ctx context.Context, connection *sql.DB, accounts *a
 	if len(catalogs) > 0 {
 		catalog = catalogs[0]
 	}
-	return &Service{memberActive: make(map[int64]int64), waiting: make(map[int64]int), capacityChanged: make(map[int64]chan struct{}), accountWaitTimeout: policy.QueueTimeout, policy: policy, health: make(map[string]*Runtime), modelHealth: make(map[modelKey]*modelRuntime), now: time.Now, runContext: runContext, stopRuntime: stopRuntime, db: connection, queries: db.New(connection), accounts: accounts, tenantID: tenantID, provider: provider, slots: make(chan struct{}, policy.Capacity), usage: newUsageCache(ctx), catalog: newCatalogCache(ctx), pricing: catalog}
+	return &Service{memberActive: make(map[int64]int64), policy: policy, health: make(map[string]*Runtime), modelHealth: make(map[modelKey]*modelRuntime), now: time.Now, runContext: runContext, stopRuntime: stopRuntime, db: connection, queries: db.New(connection), accounts: accounts, tenantID: tenantID, provider: provider, slots: make(chan struct{}, policy.Capacity), usage: newUsageCache(ctx), catalog: newCatalogCache(ctx), pricing: catalog}
 }
 
 func (s *Service) Acquire() (func(), error) {
@@ -190,6 +187,7 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 	if len(session) > 1024 {
 		return nil, upstream.ErrInput
 	}
+	entry.retryAffinity = session != ""
 	if err := s.AuthorizeModel(ctx, userID, groupID, requestedModel); err != nil {
 		return nil, err
 	}
@@ -207,7 +205,20 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 	if continued, _ := ctx.Value(continuationKey{}).(bool); continued {
 		affinity = continuationAffinity
 	}
-	id, digest, err := s.leaseAccount(ctx, entry, session, provider, model, kind, affinity, reviewParentThread(input, headers, model, kind))
+	var credential accounts.Credential
+	id, digest, err := s.leaseAccount(ctx, entry, session, provider, model, kind, affinity, reviewParentThread(input, headers, model, kind), func(id string) error {
+		var prepareErr error
+		credential, prepareErr = s.accounts.Prepare(ctx, id, s.provider.Refresh)
+		if prepareErr != nil {
+			return prepareErr
+		}
+		account, prepareErr := s.accounts.Get(ctx, id)
+		if prepareErr != nil {
+			return prepareErr
+		}
+		entry.record.Provider = account.Provider
+		return s.recheckAttempt(ctx, entry, id, model, original)
+	})
 	if id != "" {
 		if account, lookupErr := s.accounts.Get(ctx, id); lookupErr == nil {
 			entry.record.Provider = account.Provider
@@ -232,10 +243,6 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 	raw, err = json.Marshal(input)
 	if err != nil {
 		return nil, upstream.ErrInput
-	}
-	credential, err := s.accounts.Prepare(ctx, id, s.provider.Refresh)
-	if err != nil {
-		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

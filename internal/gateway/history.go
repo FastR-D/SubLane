@@ -115,6 +115,8 @@ type observation struct {
 	modelState         *modelRuntime
 	modelLimited       bool
 	modelTransient     bool
+	streamFailure      bool
+	retryAffinity      bool
 }
 
 func (s *Service) begin(ctx context.Context, userID, groupID int64, kind Kind) (*observation, error) {
@@ -204,7 +206,7 @@ func (e *observation) finish(outcome, code, penalty, retry string) {
 		s.mu.Lock()
 		// A request deadline or unknown route failure is not evidence that every
 		// model on this account is unavailable. Explicit responses have model scope.
-		e.modelTransient = s.policy.TransientThreshold > 0 && penalty == "upstream_error" && (code == "stream_interrupted" || e.record.UpstreamStatus != nil && *e.record.UpstreamStatus >= 500)
+		e.modelTransient = s.policy.TransientThreshold > 0 && penalty == "upstream_error" && (e.streamFailure || code == "stream_interrupted" || e.record.UpstreamStatus != nil && *e.record.UpstreamStatus >= 500)
 		if e.memberLeased {
 			if s.memberActive[e.record.UserID] <= 1 {
 				delete(s.memberActive, e.record.UserID)
@@ -256,9 +258,6 @@ func (e *observation) finish(outcome, code, penalty, retry string) {
 				s.failedSettlements = append(s.failedSettlements, e)
 			}
 			historyFailed = true
-		}
-		if e.leased {
-			s.notifyCapacity(e.record.AccountID)
 		}
 	})
 }

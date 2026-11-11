@@ -38,6 +38,7 @@ func TestDiagnosticsMeasuresFirstOutputNotCreatedOrCompletion(t *testing.T) {
 			}))
 			clock := time.Now()
 			s.now = func() time.Time { return clock }
+			createAdmissionKey(t, s, 42, 1, 1)
 			ctx := WithRequestIdentity(context.Background(), 42, "http")
 			x, err := s.Open(ctx, 1, 1, []byte(`{"model":"synthetic-model","input":"synthetic"}`), nil, Responses)
 			if err != nil {
@@ -125,6 +126,7 @@ func TestRequestsRecordReasoningEffort(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, _ := codexGateway(t, transportFunc(func(*http.Request) (*http.Response, error) { return syntheticStream(), nil }))
+			createAdmissionKey(t, s, 42, 1, 1)
 			ctx := WithRequestIdentity(context.Background(), 42, tc.transport)
 			model := "synthetic-model"
 			if tc.rejected {

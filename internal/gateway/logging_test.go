@@ -56,6 +56,7 @@ func TestUpstreamFailureDiagnostics(t *testing.T) {
 			s.policy.Retries = 0
 			var buffer bytes.Buffer
 			ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&buffer, nil)))
+			createAdmissionKey(t, s, 42, 1, 1)
 			ctx = WithRequestIdentity(ctx, 42, "http")
 			request := []byte(`{"model":"synthetic-model","input":"synthetic-private-prompt"}`)
 			if tc.operation == Messages {
@@ -175,6 +176,7 @@ func TestGatewayLogsOutcomesWithSafeCorrelation(t *testing.T) {
 			}))
 			var buffer bytes.Buffer
 			ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&buffer, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			createAdmissionKey(t, s, 42, 1, 1)
 			ctx = WithRequestIdentity(ctx, 42, tc.transport)
 			e, err := s.begin(ctx, 1, 1, Responses)
 			if err != nil {
@@ -230,6 +232,7 @@ func TestGatewayLogsPersistenceFailureOutsideAdmissionLock(t *testing.T) {
 	}))
 	probe := &gatewayLogProbe{service: s, test: t}
 	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(probe, nil)))
+	createAdmissionKey(t, s, 42, 1, 1)
 	ctx = WithRequestIdentity(ctx, 42, "http")
 	e, err := s.begin(ctx, 1, 1, Responses)
 	if err != nil {
