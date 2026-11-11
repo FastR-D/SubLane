@@ -118,6 +118,32 @@ func TestImportedCredentialsCannotPostponeRefresh(t *testing.T) {
 	}
 }
 
+func TestSuccessfulFallbackUseRetainsRefreshBackoff(t *testing.T) {
+	s, account, now := refreshFixture(t, "codex", time.Hour)
+	s.ConfigureRefresh(context.Background(), 96*time.Hour)
+	calls := 0
+	refresh := func(context.Context, Credential) (Credential, error) {
+		calls++
+		return Credential{}, ErrRefresh
+	}
+	for range 3 {
+		credential, err := s.Prepare(context.Background(), account.ID, refresh)
+		if err != nil || credential.AccessToken != "synthetic-old" {
+			t.Fatalf("valid old token unavailable during proactive refresh backoff: %v", err)
+		}
+		if err := s.RecordUse(context.Background(), account.ID, credential.AccessToken, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("successful fallback use caused %d refresh attempts during backoff", calls)
+	}
+	*now = now.Add(31 * time.Second)
+	if _, err := s.Prepare(context.Background(), account.ID, refresh); err != nil || calls != 2 {
+		t.Fatalf("refresh did not resume after backoff: calls=%d err=%v", calls, err)
+	}
+}
+
 func TestRefreshCloseJoinsRotationAndRejectsNewOnes(t *testing.T) {
 	s, account, now := refreshFixture(t, "codex", time.Minute)
 	s.ConfigureRefresh(context.Background(), 96*time.Hour)

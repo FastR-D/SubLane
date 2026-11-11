@@ -470,7 +470,10 @@ func (s *Service) RecordUse(ctx context.Context, id, usedToken string, accepted 
 	}
 	status := "reauth_required"
 	if accepted {
-		s.clearRefresh(id)
+		// Old-token success does not recover a failed proactive refresh endpoint.
+		if !s.refreshState(id).fallback {
+			s.clearRefresh(id)
+		}
 		status = "ready"
 	}
 	if row.Status == status {
