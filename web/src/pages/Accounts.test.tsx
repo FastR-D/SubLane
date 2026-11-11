@@ -592,7 +592,7 @@ it('loads accounts and scheduling status with a saved concurrency of 30', async 
   ).toBeNull()
 })
 
-it('explains why a quota-exhausted account is skipped for new sessions', async () => {
+it('explains automatic replacement of unavailable conversation accounts', async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url: string) => {
@@ -635,7 +635,7 @@ it('explains why a quota-exhausted account is skipped for new sessions', async (
   open()
   expect(await screen.findByText('Quota exhausted')).toBeTruthy()
   expect(
-    screen.getByText(/New sessions use another available account/),
+    screen.getByText(/unavailable accounts are replaced automatically/),
   ).toBeTruthy()
 })
 
