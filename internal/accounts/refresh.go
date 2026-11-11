@@ -23,20 +23,32 @@ type refreshState struct {
 }
 
 func (s *Service) Prepare(ctx context.Context, id string, refresh func(context.Context, Credential) (Credential, error)) (Credential, error) {
-	return s.prepare(ctx, id, "", refresh)
+	return s.prepare(ctx, id, "", "request", refresh)
+}
+
+// RefreshDue shares the same durable owner as request-triggered refresh, without exposing credentials.
+func (s *Service) RefreshDue(ctx context.Context, id string, refresh func(context.Context, Credential) (Credential, error)) error {
+	_, err := s.prepare(ctx, id, "", "scheduled", refresh)
+	return err
 }
 
 func (s *Service) RefreshAfterRejection(ctx context.Context, id, rejectedToken string, refresh func(context.Context, Credential) (Credential, error)) (Credential, error) {
 	if rejectedToken == "" {
 		return Credential{}, ErrInput
 	}
-	return s.prepare(ctx, id, rejectedToken, refresh)
+	return s.prepare(ctx, id, rejectedToken, "unauthorized", refresh)
 }
 
-func (s *Service) prepare(ctx context.Context, id, rejectedToken string, refresh func(context.Context, Credential) (Credential, error)) (Credential, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Service) prepare(ctx context.Context, id, rejectedToken, trigger string, refresh func(context.Context, Credential) (Credential, error)) (Credential, error) {
+	unlock, err := s.lockCredential(ctx, id)
+	if err != nil {
+		return Credential{}, err
+	}
+	defer unlock()
 	if err := ctx.Err(); err != nil {
+		return Credential{}, err
+	}
+	if err := s.rotationError(); err != nil {
 		return Credential{}, err
 	}
 	row, err := s.get(ctx, id)
@@ -99,15 +111,29 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken string, refresh
 		needsProject = project == ""
 	}
 	if !needsProject && !credential.Rejected && credential.ExpiresAt > s.now().Add(minimumValidity).Unix() {
-		return credential, nil
+		lead := minimumValidity
+		if credential.Kind() == "codex" {
+			lead = s.codexRefreshLead()
+			if credential.RefreshAfter > s.now().Unix() {
+				return credential, nil
+			}
+		}
+		if credential.ExpiresAt > s.now().Add(lead).Unix() {
+			return credential, nil
+		}
 	}
-	state := s.refreshes[id]
+	state := s.refreshState(id)
 	if s.now().Before(state.retryAt) {
 		return s.refreshFallback(credential, state)
 	}
 	if refresh == nil {
 		return Credential{}, ErrRefresh
 	}
+	finish, err := s.beginRotation()
+	if err != nil {
+		return Credential{}, err
+	}
+	defer finish()
 	// Refresh and administrator writes share this owner. Publish rotated credentials only after persistence.
 	// Once rotation starts, a disconnected caller must not discard a consumed refresh token's replacement.
 	// Keep provider IO and persistence synchronous and bounded under the same independent context.
@@ -116,11 +142,14 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken string, refresh
 	deviceID := claudeDeviceID(credential.Metadata)
 	updated, err := refresh(refreshCtx, credential)
 	if err != nil {
+		code, status := refreshFailureMetadata(err)
+		s.logRefresh(refreshCtx, id, credential, trigger, "failed", code, status)
 		if errors.Is(err, ErrReauthorize) {
 			if saveErr := s.queries.SetAccountStatus(refreshCtx, db.SetAccountStatusParams{ID: id, Status: "reauth_required", UpdatedAt: s.now().Unix()}); saveErr != nil {
+				s.logRefresh(refreshCtx, id, credential, trigger, "persist_failed", "credential_persistence_failed", 0)
 				return Credential{}, saveErr
 			}
-			delete(s.refreshes, id)
+			s.clearRefresh(id)
 			return Credential{}, ErrReauthorize
 		}
 		if ctx.Err() != nil {
@@ -133,19 +162,36 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken string, refresh
 	}
 	updated, _, err = prepareClaudeIdentity(updated, deviceID)
 	if err != nil {
+		s.logRefresh(refreshCtx, id, credential, trigger, "invalid_result", "invalid_identity", 0)
 		s.deferRefresh(id, err, false)
 		return Credential{}, err
 	}
 	if err := validateRefresh(credential, updated, s.now().Add(minimumValidity).Unix()); err != nil {
+		s.logRefresh(refreshCtx, id, credential, trigger, "invalid_result", "invalid_refresh_result", 0)
 		s.deferRefresh(id, err, false)
 		return Credential{}, err
 	}
 	updated.Rejected = false
+	if updated.Kind() == "codex" {
+		// Short-lived rotations must not immediately re-enter a lead intended for ten-day tokens.
+		validity := time.Duration(updated.ExpiresAt-s.now().Unix()) * time.Second
+		updated.RefreshAfter = updated.ExpiresAt - int64(min(s.codexRefreshLead(), validity/2)/time.Second)
+	}
 	if err := s.persist(refreshCtx, s.queries, id, updated, "ready"); err != nil {
+		s.logRefresh(refreshCtx, id, credential, trigger, "persist_failed", "credential_persistence_failed", 0)
 		s.deferRefresh(id, err, false)
 		return Credential{}, err
 	}
-	delete(s.refreshes, id)
+	if credential.Rejected && state.failures > 0 {
+		// A token endpoint success alone must not reset consecutive business-401 backoff.
+		state.retryAt, state.fallback = time.Time{}, false
+		s.refreshMu.Lock()
+		s.refreshes[id] = state
+		s.refreshMu.Unlock()
+	} else {
+		s.clearRefresh(id)
+	}
+	s.logRefresh(refreshCtx, id, updated, trigger, "success", "", 0)
 	if ctx.Err() != nil {
 		return Credential{}, ctx.Err()
 	}
@@ -167,6 +213,8 @@ func validateRefresh(previous, updated Credential, minimumExpiry int64) error {
 }
 
 func (s *Service) deferRefresh(id string, err error, fallback bool) refreshState {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
 	state := s.refreshes[id]
 	delay := min(5*time.Minute, (30*time.Second)<<state.failures)
 	var unavailable *RefreshError

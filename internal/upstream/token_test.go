@@ -12,6 +12,17 @@ import (
 	"github.com/murongg/SubLane/internal/accounts"
 )
 
+func TestTokenFailurePreservesOnlySafeRefreshDiagnostics(t *testing.T) {
+	err := tokenResponseFailure(401, make(http.Header), []byte(`{"error":{"code":"refresh_token_reused","message":"synthetic-private-token"}}`))
+	var failure *accounts.RefreshFailure
+	if !errors.As(err, &failure) || failure.Status != 401 || failure.Code != "refresh_token_reused" || !errors.Is(err, accounts.ErrReauthorize) {
+		t.Fatalf("refresh diagnostics were lost: %v", err)
+	}
+	if strings.Contains(err.Error(), "synthetic-private-token") {
+		t.Fatal("provider response leaked")
+	}
+}
+
 func TestProviderTokenFailuresRequireExplicitCredentialEvidence(t *testing.T) {
 	for _, provider := range []string{"claude", "antigravity"} {
 		for _, mode := range []string{"exchange", "refresh"} {

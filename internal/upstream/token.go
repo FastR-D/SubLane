@@ -21,13 +21,18 @@ func tokenFailure(response *http.Response) error {
 	return tokenResponseFailure(response.StatusCode, response.Header, raw)
 }
 
-func tokenResponseFailure(status int, headers http.Header, raw []byte) error {
+func tokenResponseFailure(status int, headers http.Header, raw []byte) (failure error) {
+	code := "unknown"
+	defer func() {
+		failure = &accounts.RefreshFailure{Status: status, Code: accounts.RefreshFailureCode(code), Err: failure}
+	}()
 	if status == http.StatusBadRequest || status == http.StatusUnauthorized {
 		var value struct {
 			Error json.RawMessage `json:"error"`
+			Code  string          `json:"code"`
 		}
 		if json.Unmarshal(raw, &value) == nil {
-			var code string
+			code = ""
 			if json.Unmarshal(value.Error, &code) != nil {
 				var detail struct {
 					Code string `json:"code"`
@@ -35,6 +40,11 @@ func tokenResponseFailure(status int, headers http.Header, raw []byte) error {
 				if json.Unmarshal(value.Error, &detail) == nil {
 					code = detail.Code
 				}
+			}
+			// Some OAuth servers put the specific rotation reason beside a generic invalid_grant.
+			switch value.Code {
+			case "refresh_token_reused", "refresh_token_invalidated", "refresh_token_expired":
+				code = value.Code
 			}
 			// HTTP status alone can also describe a proxy or shared OAuth client failure.
 			// Match only explicit credential codes, never free-form upstream messages.
@@ -45,6 +55,10 @@ func tokenResponseFailure(status int, headers http.Header, raw []byte) error {
 		}
 	}
 	if status == http.StatusTooManyRequests || status >= 500 {
+		code = "upstream_unavailable"
+		if status == http.StatusTooManyRequests {
+			code = "rate_limited"
+		}
 		var seconds int64
 		value := headers.Get("Retry-After")
 		if n, err := strconv.ParseInt(value, 10, 64); err == nil {

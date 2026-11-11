@@ -23,6 +23,8 @@ type Credential struct {
 	Email        string                     `json:"email,omitempty"`
 	Plan         string                     `json:"plan,omitempty"`
 	ExpiresAt    int64                      `json:"expires_at"`
+	// RefreshAfter is owned by successful rotation, never trusted from imports.
+	RefreshAfter int64 `json:"refresh_after,omitempty"`
 	// Keep rejection with the encrypted token so a restart cannot make it eligible for fallback.
 	Rejected bool `json:"access_token_rejected,omitempty"`
 }
@@ -87,6 +89,7 @@ func ParseFor(provider string, raw []byte) (Credential, error) {
 	}
 	// Token claims describe upstream identity and routing, never SubLane authentication or roles.
 	credential.BaseURL = ""
+	credential.RefreshAfter = 0
 	claims := tokenClaims(credential.IDToken)
 	if claims.AccountID != "" {
 		if credential.AccountID != "" && credential.AccountID != claims.AccountID {
@@ -222,6 +225,7 @@ func parseSubscription(provider string, raw []byte) (Credential, error) {
 		return Credential{}, ErrInput
 	}
 	c := input.Credential
+	c.RefreshAfter = 0
 	c.BaseURL = ""
 	c.Provider = provider
 	c.Metadata = make(map[string]json.RawMessage)

@@ -477,6 +477,11 @@ func (s *Service) DeleteFailedProxies(ctx context.Context) (int64, error) {
 }
 
 func (s *Service) BindProxy(ctx context.Context, accountID, proxyID string) (Account, error) {
+	unlock, err := s.lockCredential(ctx, accountID)
+	if err != nil {
+		return Account{}, err
+	}
+	defer unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.BeginTx(ctx, nil)

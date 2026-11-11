@@ -51,14 +51,21 @@ type Account struct {
 }
 
 type Service struct {
-	db        *sql.DB
-	queries   *db.Queries
-	vault     *vault.Vault
-	tenantID  int64
-	now       func() time.Time
-	codexOnly bool
-	refreshes map[string]refreshState
-	// Refresh and administrator mutations share one owner; no model stream holds this lock.
+	db          *sql.DB
+	queries     *db.Queries
+	vault       *vault.Vault
+	tenantID    int64
+	now         func() time.Time
+	codexOnly   bool
+	refreshes   map[string]refreshState
+	refreshMu   sync.Mutex
+	locks       map[string]*credentialLock
+	refreshLead time.Duration
+	processCtx  context.Context
+	lifecycleMu sync.Mutex
+	closing     bool
+	rotations   sync.WaitGroup
+	// Short administrator transactions remain serialized; provider IO holds only its account lock.
 	mu sync.Mutex
 }
 
@@ -144,9 +151,17 @@ func (s *Service) save(ctx context.Context, name string, credential Credential, 
 	if err != nil {
 		return Account{}, err
 	}
+	if replaceID != "" {
+		unlock, err := s.lockCredential(ctx, replaceID)
+		if err != nil {
+			return Account{}, err
+		}
+		defer unlock()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	credential.Rejected = false
+	credential.RefreshAfter = 0
 	now := s.now().Unix()
 	if replaceID != "" {
 		row, err := s.get(ctx, replaceID)
@@ -204,7 +219,7 @@ func (s *Service) save(ctx context.Context, name string, credential Credential, 
 		if err := tx.Commit(); err != nil {
 			return Account{}, err
 		}
-		delete(s.refreshes, replaceID)
+		s.clearRefresh(replaceID)
 		row.Email, row.Plan, row.Status, row.ExpiresAt, row.UpdatedAt = credential.Email, credential.Plan, status, credential.ExpiresAt, now
 		result := metadata(row)
 		if credential.Kind() == "openai" {
@@ -273,6 +288,11 @@ func (s *Service) save(ctx context.Context, name string, credential Credential, 
 }
 
 func (s *Service) SetEnabled(ctx context.Context, id string, enabled bool) (Account, error) {
+	unlock, err := s.lockCredential(ctx, id)
+	if err != nil {
+		return Account{}, err
+	}
+	defer unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, err := s.get(ctx, id)
@@ -303,6 +323,11 @@ func (s *Service) SetEnabled(ctx context.Context, id string, enabled bool) (Acco
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
+	unlock, err := s.lockCredential(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -336,7 +361,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	delete(s.refreshes, id)
+	s.clearRefresh(id)
 	return nil
 }
 
@@ -413,6 +438,11 @@ func (s *Service) decrypt(row db.Account) (Credential, error) {
 }
 
 func (s *Service) RecordUse(ctx context.Context, id, usedToken string, accepted bool) error {
+	unlock, err := s.lockCredential(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, err := s.get(ctx, id)
@@ -425,11 +455,22 @@ func (s *Service) RecordUse(ctx context.Context, id, usedToken string, accepted 
 	}
 	// Results from older in-flight requests must not overwrite a later refresh or reauthorization.
 	// A late success cannot repair a refresh token that requires explicit reauthorization.
-	if credential.AccessToken != usedToken || (accepted && row.Status == "reauth_required") {
+	if credential.AccessToken != usedToken || row.Status == "reauth_required" || accepted && credential.Rejected {
+		return nil
+	}
+	if !accepted && credential.Kind() != "openai" {
+		// An inference/catalog 401 does not prove that the refresh credential is invalid.
+		credential.Rejected = true
+		if err := s.persist(ctx, s.queries, id, credential, row.Status); err != nil {
+			return err
+		}
+		s.deferRefresh(id, ErrRefresh, false)
+		s.logRefresh(ctx, id, credential, "unauthorized", "rejected", "inference_unauthorized", 401)
 		return nil
 	}
 	status := "reauth_required"
 	if accepted {
+		s.clearRefresh(id)
 		status = "ready"
 	}
 	if row.Status == status {

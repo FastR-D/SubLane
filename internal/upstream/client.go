@@ -181,6 +181,9 @@ func (c *Client) tokens(ctx context.Context, form url.Values, old accounts.Crede
 	request.Header.Set("Accept", "application/json")
 	response, err := c.http.Do(request)
 	if err != nil {
+		if ctx.Err() != nil {
+			return accounts.Credential{}, ctx.Err()
+		}
 		return accounts.Credential{}, ErrUpstream
 	}
 	defer response.Body.Close()
