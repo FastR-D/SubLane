@@ -34,6 +34,7 @@ func (c *Config) loadGateway(getenv func(string) string) error {
 	}
 	for key, target := range map[string]*time.Duration{
 		"SUBLANE_GATEWAY_QUEUE_TIMEOUT": &p.QueueTimeout, "SUBLANE_GATEWAY_REQUEST_TIMEOUT": &p.RequestTimeout,
+		"SUBLANE_GATEWAY_UPLOAD_IDLE_TIMEOUT": &p.UploadIdleTimeout, "SUBLANE_GATEWAY_UPLOAD_TIMEOUT": &p.UploadTimeout,
 		"SUBLANE_GATEWAY_STREAM_IDLE_TIMEOUT": &p.StreamIdleTimeout, "SUBLANE_GATEWAY_KEEPALIVE_INTERVAL": &p.KeepaliveInterval,
 		"SUBLANE_GATEWAY_RETRY_DELAY": &p.RetryDelay, "SUBLANE_GATEWAY_TRANSIENT_WINDOW": &p.TransientWindow,
 		"SUBLANE_GATEWAY_TRANSIENT_COOLDOWN": &p.TransientCooldown, "SUBLANE_GATEWAY_RATE_LIMIT_COOLDOWN": &p.RateLimitCooldown,

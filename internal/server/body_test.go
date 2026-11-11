@@ -164,9 +164,28 @@ func TestUploadReaderKeepsItsTotalBudget(t *testing.T) {
 
 func TestUploadReadDeadlineIsClearedAfterFailure(t *testing.T) {
 	w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
-	_, err := readRequestBody(http.NewResponseController(w), iotest.ErrReader(context.DeadlineExceeded))
+	_, err := readRequestBody(http.NewResponseController(w), iotest.ErrReader(context.DeadlineExceeded), gateway.DefaultPolicy())
 	if !errors.Is(err, context.DeadlineExceeded) || len(w.deadlines) < 2 || w.deadlines[0].IsZero() || !w.deadlines[len(w.deadlines)-1].IsZero() {
 		t.Fatal("upload deadline leaked into response processing", err, w.deadlines)
+	}
+}
+
+func TestUploadReadUsesConfiguredBudgets(t *testing.T) {
+	for _, total := range []time.Duration{20 * time.Second, 3 * time.Minute} {
+		t.Run(total.String(), func(t *testing.T) {
+			policy := gateway.DefaultPolicy()
+			policy.UploadIdleTimeout, policy.UploadTimeout = time.Minute, total
+			w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+			before := time.Now()
+			body, err := readRequestBody(http.NewResponseController(w), strings.NewReader("synthetic upload"), policy)
+			if err != nil || string(body) != "synthetic upload" || len(w.deadlines) < 2 {
+				t.Fatal("configured upload failed", err, w.deadlines)
+			}
+			budget := min(policy.UploadIdleTimeout, total)
+			if got := w.deadlines[0]; got.Before(before.Add(budget)) || got.After(time.Now().Add(budget)) || !w.deadlines[len(w.deadlines)-1].IsZero() {
+				t.Fatal("upload did not honor or clear its configured read deadline", w.deadlines)
+			}
+		})
 	}
 }
 

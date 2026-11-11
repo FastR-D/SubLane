@@ -120,7 +120,7 @@ func (h *keyHTTP) proxy(w http.ResponseWriter, r *http.Request, kind gateway.Kin
 	}
 	controller := http.NewResponseController(w)
 	r.Body = http.MaxBytesReader(w, r.Body, h.gateway.MaxRequestBody())
-	raw, err := readRequestBody(controller, r.Body)
+	raw, err := readRequestBody(controller, r.Body, h.gateway.Policy())
 	if err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {

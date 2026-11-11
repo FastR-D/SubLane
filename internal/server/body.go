@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/murongg/SubLane/internal/gateway"
 )
 
 var (
@@ -41,8 +43,8 @@ func (r *uploadReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func readRequestBody(controller *http.ResponseController, body io.Reader) ([]byte, error) {
-	r := &uploadReader{reader: body, controller: controller, idle: 30 * time.Second, deadline: time.Now().Add(5 * time.Minute)}
+func readRequestBody(controller *http.ResponseController, body io.Reader, policy gateway.Policy) ([]byte, error) {
+	r := &uploadReader{reader: body, controller: controller, idle: policy.UploadIdleTimeout, deadline: time.Now().Add(policy.UploadTimeout)}
 	r.renewDeadline()
 	// An upload deadline must never become a deadline on generation or the next keep-alive request.
 	defer controller.SetReadDeadline(time.Time{})
