@@ -18,6 +18,8 @@ services:
       SUBLANE_PUBLIC_URL: ${SUBLANE_PUBLIC_URL:-}
       SUBLANE_TRUSTED_PROXIES: ${SUBLANE_TRUSTED_PROXIES:-}
       SUBLANE_LOG_LEVEL: ${SUBLANE_LOG_LEVEL:-info}
+      SUBLANE_CODEX_REFRESH_LEAD: ${SUBLANE_CODEX_REFRESH_LEAD:-96h}
+      SUBLANE_ACCOUNT_REFRESH_INTERVAL: ${SUBLANE_ACCOUNT_REFRESH_INTERVAL:-1m}
       SUBLANE_MAX_REQUEST_BODY_MB: ${SUBLANE_MAX_REQUEST_BODY_MB:-128}
       SUBLANE_GATEWAY_CAPACITY: ${SUBLANE_GATEWAY_CAPACITY:-128}
       SUBLANE_GATEWAY_QUOTA_WEIGHTED: ${SUBLANE_GATEWAY_QUOTA_WEIGHTED:-false}
@@ -44,7 +46,7 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
-    stop_grace_period: 30s
+    stop_grace_period: 75s
     init: true
     logging:
       driver: json-file

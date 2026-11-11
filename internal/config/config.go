@@ -38,11 +38,16 @@ type Config struct {
 	UpdateDir              string
 	Gateway                gateway.Policy
 	InferenceHeaderTimeout time.Duration
+	CodexRefreshLead       time.Duration
+	AccountRefreshInterval time.Duration
 }
 
 func Load(getenv func(string) string) (Config, error) {
 	c := Config{Addr: "127.0.0.1:8080", DataDir: "./data", LogLevel: slog.LevelInfo, MaxRequestBody: 128 << 20, PricingInterval: 6 * time.Hour, Gateway: gateway.DefaultPolicy(), InferenceHeaderTimeout: 5 * time.Minute}
 	c.UpdateDir = getenv("SUBLANE_UPDATE_DIR")
+	if err := c.loadRefresh(getenv); err != nil {
+		return c, err
+	}
 	if c.UpdateDir != "" && !filepath.IsAbs(c.UpdateDir) {
 		return c, fmt.Errorf("SUBLANE_UPDATE_DIR must be an absolute host-worker mailbox path")
 	}

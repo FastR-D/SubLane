@@ -4,6 +4,12 @@ SELECT count(*) FROM accounts WHERE tenant_id = sqlc.arg(tenant_id);
 -- name: CountAllAccounts :one
 SELECT count(*) FROM accounts;
 
+-- name: ListDueCodexRefresh :many
+SELECT a.id,a.tenant_id FROM accounts a JOIN tenants t ON t.id=a.tenant_id
+WHERE t.status='active' AND a.provider='codex' AND a.enabled=1 AND a.status!='reauth_required'
+AND a.expires_at<=sqlc.arg(before_expiry) AND a.id>sqlc.arg(after_id)
+ORDER BY a.id LIMIT 100;
+
 -- name: ListAccounts :many
 SELECT id, provider, name, email, plan, enabled, status, expires_at, created_at, updated_at, max_concurrency, proxy_id,
  (SELECT count(*) FROM group_accounts ga WHERE ga.account_id=accounts.id) AS group_count

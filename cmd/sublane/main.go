@@ -180,6 +180,7 @@ func run() error {
 	softwareUpdates := updates.New(version, cfg.UpdateDir, nil)
 	defer softwareUpdates.Close()
 	registry := &tenantRegistry{updates: softwareUpdates, metrics: telemetry, ctx: ctx, db: db, vault: cipher, auth: authentication,
+		refreshLead: cfg.CodexRefreshLead, refreshInterval: cfg.AccountRefreshInterval,
 		turnstile: loginVerification,
 		alerts:    notifications,
 		tenants:   tenancy, provider: provider, pricing: priceCatalog, versions: codexVersions, grokVersions: grokVersions, claudeVersions: claudeVersions, timeZone: timeZone,

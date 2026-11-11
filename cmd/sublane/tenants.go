@@ -36,6 +36,7 @@ import (
 type tenantRuntime struct {
 	handler  http.Handler
 	gateway  *gateway.Service
+	accounts *accounts.Service
 	active   int
 	lastUsed time.Time
 }
@@ -101,6 +102,11 @@ type tenantRegistry struct {
 	gatewayPolicy     gateway.Policy
 	stopReap          chan struct{}
 	reapDone          chan struct{}
+	refreshLead       time.Duration
+	refreshInterval   time.Duration
+	refreshDone       chan struct{}
+	stopRefresh       context.CancelFunc
+	retiring          map[int64]chan struct{}
 }
 
 func (r *tenantRegistry) Handler(id int64) http.Handler {
@@ -124,6 +130,16 @@ func (r *tenantRegistry) clock() time.Time {
 
 func (r *tenantRegistry) acquire(id int64) *tenantRuntime {
 	r.mu.Lock()
+	for r.retiring[id] != nil {
+		done := r.retiring[id]
+		r.mu.Unlock()
+		select {
+		case <-done:
+		case <-r.ctx.Done():
+			return nil
+		}
+		r.mu.Lock()
+	}
 	defer r.mu.Unlock()
 	if r.closed {
 		return nil
@@ -137,6 +153,11 @@ func (r *tenantRegistry) acquire(id int64) *tenantRuntime {
 		r.enrollmentLimiter = server.NewLoginLimiter()
 	}
 	accountService := accounts.NewForTenant(r.db, r.vault, id)
+	lead := r.refreshLead
+	if lead == 0 {
+		lead = accounts.CodexRefreshLead
+	}
+	accountService.ConfigureRefresh(r.ctx, lead)
 	policy := r.gatewayPolicy
 	if policy.Capacity == 0 {
 		policy = gateway.DefaultPolicy()
@@ -170,7 +191,7 @@ func (r *tenantRegistry) acquire(id int64) *tenantRuntime {
 	if r.runtimes == nil {
 		r.runtimes = make(map[int64]*tenantRuntime)
 	}
-	runtime := &tenantRuntime{handler: handler, gateway: forwarding, active: 1, lastUsed: r.clock()}
+	runtime := &tenantRuntime{handler: handler, gateway: forwarding, accounts: accountService, active: 1, lastUsed: r.clock()}
 	r.runtimes[id] = runtime
 	return runtime
 }
@@ -199,6 +220,11 @@ func (r *tenantRegistry) Start() {
 	r.resetCredits = resets.New(r.db, location, r.resetObservation, r.redeemResetCredit)
 	r.resetCredits.Start(r.ctx)
 	stop, done := r.stopReap, r.reapDone
+	if r.refreshInterval > 0 {
+		refreshCtx, cancel := context.WithCancel(r.ctx)
+		r.stopRefresh, r.refreshDone = cancel, make(chan struct{})
+		go r.maintainAccounts(refreshCtx, r.refreshDone)
+	}
 	r.mu.Unlock()
 	go func() {
 		defer close(done)
@@ -224,16 +250,24 @@ func (r *tenantRegistry) reapIdle() {
 		return
 	}
 	cutoff := r.clock().Add(-runtimeIdleTimeout)
-	var retired []*tenantRuntime
+	retired := make(map[int64]*tenantRuntime)
 	for id, runtime := range r.runtimes {
 		if runtime.active == 0 && !runtime.lastUsed.After(cutoff) {
 			delete(r.runtimes, id)
-			retired = append(retired, runtime)
+			if r.retiring == nil {
+				r.retiring = make(map[int64]chan struct{})
+			}
+			r.retiring[id] = make(chan struct{})
+			retired[id] = runtime
 		}
 	}
 	r.mu.Unlock()
-	for _, runtime := range retired {
-		runtime.gateway.Close()
+	for id, runtime := range retired {
+		runtime.close()
+		r.mu.Lock()
+		close(r.retiring[id])
+		delete(r.retiring, id)
+		r.mu.Unlock()
 	}
 }
 
@@ -247,18 +281,39 @@ func (r *tenantRegistry) Close() {
 		return
 	}
 	r.closed = true
+	if r.stopRefresh != nil {
+		r.stopRefresh()
+	}
 	if r.stopReap != nil {
 		close(r.stopReap)
 	}
 	done := r.reapDone
+	refreshDone := r.refreshDone
+	retiring := make([]chan struct{}, 0, len(r.retiring))
+	for _, ch := range r.retiring {
+		retiring = append(retiring, ch)
+	}
 	runtimes := r.runtimes
 	r.runtimes = nil
 	r.mu.Unlock()
 	if done != nil {
 		<-done
 	}
+	if refreshDone != nil {
+		<-refreshDone
+	}
+	for _, ch := range retiring {
+		<-ch
+	}
 	for _, runtime := range runtimes {
-		runtime.gateway.Close()
+		runtime.close()
+	}
+}
+
+func (r *tenantRuntime) close() {
+	r.gateway.Close()
+	if r.accounts != nil {
+		r.accounts.Close()
 	}
 }
 

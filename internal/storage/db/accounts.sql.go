@@ -191,6 +191,46 @@ func (q *Queries) ListAccounts(ctx context.Context, tenantID int64) ([]ListAccou
 	return items, nil
 }
 
+const listDueCodexRefresh = `-- name: ListDueCodexRefresh :many
+SELECT a.id,a.tenant_id FROM accounts a JOIN tenants t ON t.id=a.tenant_id
+WHERE t.status='active' AND a.provider='codex' AND a.enabled=1 AND a.status!='reauth_required'
+AND a.expires_at<=?1 AND a.id>?2
+ORDER BY a.id LIMIT 100
+`
+
+type ListDueCodexRefreshParams struct {
+	BeforeExpiry int64
+	AfterID      string
+}
+
+type ListDueCodexRefreshRow struct {
+	ID       string
+	TenantID int64
+}
+
+func (q *Queries) ListDueCodexRefresh(ctx context.Context, arg ListDueCodexRefreshParams) ([]ListDueCodexRefreshRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDueCodexRefresh, arg.BeforeExpiry, arg.AfterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDueCodexRefreshRow{}
+	for rows.Next() {
+		var i ListDueCodexRefreshRow
+		if err := rows.Scan(&i.ID, &i.TenantID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setAccountEnabled = `-- name: SetAccountEnabled :exec
 UPDATE accounts SET enabled = ?1, updated_at = ?2,
 models_revision = models_revision + CASE WHEN enabled != ?1 THEN 1 ELSE 0 END
