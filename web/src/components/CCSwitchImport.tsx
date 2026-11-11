@@ -13,6 +13,7 @@ import {
   ccSwitchApps,
   ccSwitchEndpoint,
   ccSwitchLink,
+  isImageModel,
   openCCSwitch,
   validImportSettings,
   type ImportApp,
@@ -124,7 +125,11 @@ function ImportForm({
   const catalog = useQuery(
     catalogOptions(client, { kind: 'key', id: value.id }, userID),
   )
-  const modelAllowed = Boolean(catalog.data?.models.includes(model.trim()))
+  // Image models only serve the Images endpoints and cannot drive a chat client.
+  const chatModels = (catalog.data?.models ?? []).filter(
+    (id) => !isImageModel(id),
+  )
+  const modelAllowed = chatModels.includes(model.trim())
   const { mutation, isCurrentOwner } = useKeySecret<ImportSettings>(
     userID,
     value.id,
@@ -230,7 +235,7 @@ function ImportForm({
             id="cc-switch-model"
             value={model}
             onChange={setModel}
-            models={catalog.data?.models ?? []}
+            models={chatModels}
             disabled={mutation.isPending || prepared !== null}
           />
           {app === 'claude' && (
@@ -258,11 +263,7 @@ function ImportForm({
             catalog.data?.partial) && (
             <div className="space-y-2">
               <p role="status" className="text-xs text-warning">
-                {t(
-                  catalog.data?.models.length
-                    ? 'catalogPartial'
-                    : 'catalogLoadFailed',
-                )}
+                {t(chatModels.length ? 'catalogPartial' : 'catalogLoadFailed')}
               </p>
               <Button
                 type="button"
@@ -283,7 +284,7 @@ function ImportForm({
           {catalog.data &&
             !catalog.data.refreshing &&
             !catalog.isError &&
-            !catalog.data.models.length && (
+            !chatModels.length && (
               <p className="text-xs text-muted-foreground">
                 {t('catalogEmptyGroup')}
               </p>

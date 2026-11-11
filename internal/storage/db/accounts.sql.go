@@ -191,6 +191,27 @@ func (q *Queries) ListAccounts(ctx context.Context, tenantID int64) ([]ListAccou
 	return items, nil
 }
 
+const renameAccount = `-- name: RenameAccount :exec
+UPDATE accounts SET name = ?1, updated_at = ?2 WHERE id = ?3 AND tenant_id = ?4
+`
+
+type RenameAccountParams struct {
+	Name      string
+	UpdatedAt int64
+	ID        string
+	TenantID  int64
+}
+
+func (q *Queries) RenameAccount(ctx context.Context, arg RenameAccountParams) error {
+	_, err := q.db.ExecContext(ctx, renameAccount,
+		arg.Name,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.TenantID,
+	)
+	return err
+}
+
 const setAccountEnabled = `-- name: SetAccountEnabled :exec
 UPDATE accounts SET enabled = ?1, updated_at = ?2,
 models_revision = models_revision + CASE WHEN enabled != ?1 THEN 1 ELSE 0 END

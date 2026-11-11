@@ -182,7 +182,7 @@ export const channelSchema = z.object({
 export type Channel = z.infer<typeof channelSchema>
 export type ChannelInput = {
   name: string
-  api_key: string
+  api_key?: string
   base_url: string
   proxy_id?: string
   platform?: ChannelPlatform
@@ -213,7 +213,7 @@ export const channelRuntimeOptions = {
 }
 export function saveChannel({ id, ...input }: ChannelInput & { id?: string }) {
   return request(
-    id ? `/api/channels/${encodeURIComponent(id)}/key` : '/api/channels',
+    id ? `/api/channels/${encodeURIComponent(id)}` : '/api/channels',
     channelSchema,
     { method: id ? 'PUT' : 'POST', body: JSON.stringify(input) },
   )
@@ -306,4 +306,17 @@ export function channelLoadErrorKey(error: unknown) {
   )
     return 'channelBackendMissing'
   return 'channelsLoadFailed'
+}
+
+// Usage is read from opencode.ai only for channels whose key belongs to that origin.
+export function reportsOpenCodeUsage(
+  channel: Pick<Channel, 'platform' | 'base_url'>,
+) {
+  if (channel.platform !== 'opencode-go') return false
+  try {
+    const url = new URL(channel.base_url)
+    return url.protocol === 'https:' && url.host === 'opencode.ai'
+  } catch {
+    return false
+  }
 }

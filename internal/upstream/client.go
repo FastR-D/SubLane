@@ -281,7 +281,7 @@ func (c *Client) models(ctx context.Context, credential accounts.Credential, ver
 			models = append(models, Model{ModelCapabilities: discoveryCapabilities(raw, "codex"), ID: model.Slug, Object: "model", OwnedBy: "openai", Hidden: model.Visibility == "hide" || model.Visibility == "hidden"})
 		}
 	}
-	return models, nil
+	return appendImageModels(models), nil
 }
 
 type UpstreamError struct {

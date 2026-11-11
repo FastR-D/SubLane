@@ -10,6 +10,8 @@ type Resource struct {
 type Routing struct {
 	Preference       string `json:"preference"`
 	AllowAPIFallback bool   `json:"allow_api_fallback"`
+	// SessionSticky derives conversation keys for sessionless clients and lets subagents inherit their parent's resource.
+	SessionSticky bool `json:"session_sticky"`
 }
 
 func (r Routing) valid() bool {

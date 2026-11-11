@@ -487,7 +487,7 @@ func TestVersionChangeDiscardsAnInFlightCatalog(t *testing.T) {
 		t.Fatal("old backoff blocked new version discovery", err)
 	}
 	current, err := s.accounts.Catalog(ctx, ids["codex"])
-	if err != nil || current.Source != "codex:v3:0.300.0" {
+	if err != nil || current.Source != "codex:v4:0.300.0" {
 		t.Fatal(current, err)
 	}
 }

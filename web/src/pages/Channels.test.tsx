@@ -164,7 +164,8 @@ it('creates a channel independently and removes the key from mutation state', as
   ).toBe(false)
 })
 
-it('replaces a channel key without exposing the stored key or changing its endpoint', async () => {
+it('renames a channel, keeps its stored key and locks its endpoint', async () => {
+  const bodies: unknown[] = []
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -174,14 +175,8 @@ it('replaces a channel key without exposing the stored key or changing its endpo
         return Promise.resolve(response({ channels: [channel] }))
       if (url === '/api/channels/runtime')
         return Promise.resolve(response({ channels: [], server_time: 1 }))
-      if (url === '/api/channels/synthetic-channel/key') {
-        expect(JSON.parse(String(init?.body))).toEqual({
-          name: channel.name,
-          base_url: channel.base_url,
-          api_key: 'synthetic-rotated-key',
-          platform: 'custom',
-          protocol: 'openai',
-        })
+      if (url === '/api/channels/synthetic-channel' && init?.method === 'PUT') {
+        bodies.push(JSON.parse(String(init.body)))
         return Promise.resolve(response(channel))
       }
       return Promise.resolve(response({}))
@@ -199,23 +194,28 @@ it('replaces a channel key without exposing the stored key or changing its endpo
   await user.click(
     screen.getByRole('button', { name: 'Actions for Synthetic API' }),
   )
-  await user.click(screen.getByRole('menuitem', { name: 'Replace API key' }))
+  await user.click(screen.getByRole('menuitem', { name: 'Edit channel' }))
   const dialog = await screen.findByRole('dialog')
+  const key = within(dialog).getByLabelText(
+    'Upstream API key',
+  ) as HTMLInputElement
+  expect(key.value).toBe('')
+  const name = within(dialog).getByLabelText('Channel name')
+  await user.clear(name)
+  await user.type(name, 'Synthetic renamed')
   expect(
     (within(dialog).getByLabelText('Base URL') as HTMLInputElement).readOnly,
   ).toBe(true)
-  expect(
-    (within(dialog).getByLabelText('Upstream API key') as HTMLInputElement)
-      .value,
-  ).toBe('')
-  await user.type(
-    within(dialog).getByLabelText('Upstream API key'),
-    'synthetic-rotated-key',
-  )
-  await user.click(
-    within(dialog).getByRole('button', { name: 'Replace API key' }),
-  )
+  await user.click(within(dialog).getByRole('button', { name: 'Save channel' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(bodies).toEqual([
+    {
+      name: 'Synthetic renamed',
+      base_url: channel.base_url,
+      platform: 'custom',
+      protocol: 'openai',
+    },
+  ])
 })
 
 it('selects platform presets and accepts a custom endpoint and protocol', async () => {

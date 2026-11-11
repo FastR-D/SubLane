@@ -32,6 +32,7 @@ func (h *groupHTTP) register(router chi.Router) {
 	router.Get("/{id}/models", h.catalog)
 	router.Get("/{id}/models/availability", h.availability)
 	router.Patch("/{id}", h.update)
+	router.Delete("/{id}", h.remove)
 	router.Get("/members/{id}", h.memberGroups)
 	router.Put("/members/{id}", h.setMemberGroups)
 }
@@ -77,6 +78,22 @@ func (h *groupHTTP) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.save(w, r, id)
+}
+func (h *groupHTTP) remove(w http.ResponseWriter, r *http.Request) {
+	var input struct{}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	id, err := pathID(r)
+	if err != nil || id <= 0 {
+		groupError(w, groups.ErrNotFound)
+		return
+	}
+	if err := h.service.Delete(r.Context(), id); err != nil {
+		groupError(w, err)
+		return
+	}
+	w.WriteHeader(204)
 }
 func (h *groupHTTP) save(w http.ResponseWriter, r *http.Request, id int64) {
 	var input struct {
@@ -198,6 +215,8 @@ func groupError(w http.ResponseWriter, err error) {
 		status, code = 409, "group_exists"
 	case errors.Is(err, groups.ErrLimit):
 		status, code = 409, "group_limit"
+	case errors.Is(err, groups.ErrInUse):
+		status, code = 409, "group_in_use"
 	case errors.Is(err, groups.ErrUnavailable):
 		status, code = 403, "group_unavailable"
 	}

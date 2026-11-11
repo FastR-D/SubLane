@@ -162,6 +162,8 @@ export function settleAllocation(
     input: number
     output: number
     cached: number
+    // Image share of input for image model requests; settled at the image input rate.
+    image_input?: number
   },
 ) {
   return request(`/api/allocations/${id}/settle`, z.undefined(), {
@@ -229,6 +231,21 @@ export function allocationErrorKey(error: Error) {
     if (error.code === 'allocation_pending') return 'allocationPending'
   }
   return 'allocationFailed'
+}
+
+export function deleteScheme(id: number) {
+  return request(`/api/allocations/${id}`, z.undefined(), {
+    method: 'DELETE',
+    body: '{}',
+  })
+}
+export function allocationDeleteErrorKey(error: Error) {
+  if (error instanceof ApiError) {
+    if (error.code === 'demo_read_only') return 'demoReadOnly'
+    if (error.code === 'allocation_in_flight') return 'allocationDeleteInFlight'
+    if (error.code === 'allocation_not_found') return 'allocationDeleteMissing'
+  }
+  return 'allocationDeleteFailed'
 }
 
 export function setSchemeEnabled(id: number, enabled: boolean) {

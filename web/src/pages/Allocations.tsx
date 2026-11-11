@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Clock3, Plus } from 'lucide-react'
+import { Clock3, Plus, Trash2 } from 'lucide-react'
 import {
   schemesOptions,
   availableAllocationPools,
   saveScheme,
   previewInitial,
   setSchemeEnabled,
+  deleteScheme,
+  allocationDeleteErrorKey,
   modeLabels,
   allocationErrorKey,
   type Scheme,
@@ -19,6 +21,7 @@ import { SchemeForm } from '@/components/SchemeForm'
 import { AllocationPriceWarning } from '@/components/AllocationPriceWarning'
 import { AllocationReport } from '@/components/AllocationReport'
 import { AllocationSchedule } from '@/components/AllocationSchedule'
+import { ConfirmDelete } from '@/components/ConfirmDelete'
 import { Button } from '@/components/ui/Button'
 import { Status } from '@/components/Status'
 import { formatInstanceDate, useTimeZone } from '@/lib/timezone'
@@ -31,6 +34,7 @@ export function Allocations() {
   const client = useQueryClient()
   const [editing, setEditing] = useState<Scheme | null | undefined>()
   const [viewing, setViewing] = useState<number | null>(null)
+  const [removing, setRemoving] = useState<Scheme | null>(null)
   const [formPoolID, setFormPoolID] = useState(0)
   const [reviewGeneration, setReviewGeneration] = useState(0)
   const [creationPreview, setCreationPreview] = useState<{
@@ -350,6 +354,16 @@ export function Allocations() {
                   >
                     {t(s.enabled ? 'allocationPause' : 'allocationResume')}
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-error [@media(pointer:coarse)]:size-11"
+                    onClick={() => setRemoving(s)}
+                    title={t('allocationDelete')}
+                    aria-label={t('allocationDeleteNamed', { name: s.name })}
+                  >
+                    <Trash2 aria-hidden="true" className="size-4" />
+                  </Button>
                 </div>
               </div>
               {s.next && (
@@ -401,6 +415,24 @@ export function Allocations() {
             </section>
           ))}
         </div>
+      )}
+      {removing && (
+        <ConfirmDelete
+          title={t('allocationDeleteTitle')}
+          description={t('allocationDeleteDescription', {
+            name: removing.name,
+          })}
+          action={t('allocationDelete')}
+          remove={() => deleteScheme(removing.id)}
+          errorText={(error) => t(allocationDeleteErrorKey(error))}
+          onClose={() => setRemoving(null)}
+          onDeleted={async () => {
+            await Promise.all([
+              saved(),
+              client.invalidateQueries({ queryKey: ['groups'] }),
+            ])
+          }}
+        />
       )}
     </div>
   )

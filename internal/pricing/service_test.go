@@ -206,3 +206,18 @@ func TestHashForDocument(t *testing.T) {
 		t.Fatalf("unexpected hash: %s", got)
 	}
 }
+
+func TestImageGenerationPricesUseImageOutputTokens(t *testing.T) {
+	// The default feed lists both text and image output rates for gpt-image models.
+	prices, err := parsePrices([]byte(`{"gpt-image-2":{"mode":"image_generation","input_cost_per_token":0.000005,"cache_read_input_token_cost":0.00000125,"output_cost_per_token":0.00001,"input_cost_per_image_token":0.000008,"output_cost_per_image_token":0.00003},"image-without-mode":{"input_cost_per_token":0.000005,"output_cost_per_token":0.00001,"input_cost_per_image_token":0.000008,"output_cost_per_image_token":0.00003}}`), "remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	price, ok := prices["gpt-image-2"]
+	if !ok || price.Input != 5_000_000 || price.Cached != 1_250_000 || price.Output != 30_000_000 || price.ImageInput != 8_000_000 {
+		t.Fatalf("image price: %+v %v", price, ok)
+	}
+	if other := prices["image-without-mode"]; other.Output != 10_000_000 || other.ImageInput != 0 {
+		t.Fatalf("image token prices were applied outside image generation models: %+v", other)
+	}
+}

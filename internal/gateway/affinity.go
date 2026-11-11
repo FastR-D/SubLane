@@ -18,6 +18,12 @@ func sessionDigest(userID, groupID int64, session string) [32]byte {
 	return sha256.Sum256([]byte(fmt.Sprintf("%d:%d:%s", userID, groupID, session)))
 }
 
+// derivedDigest hashes stickiness preferences in a namespace explicit session digests cannot produce:
+// explicit inputs always begin with a numeric user ID.
+func derivedDigest(userID, groupID int64, session string) [32]byte {
+	return sha256.Sum256([]byte(fmt.Sprintf("derived:%d:%d:%s", userID, groupID, session)))
+}
+
 func sessionBinding(ctx context.Context, q *db.Queries, params db.ListSessionAffinitiesParams, scope string) (*db.ListSessionAffinitiesRow, error) {
 	bindings, err := q.ListSessionAffinities(ctx, params)
 	if err != nil {

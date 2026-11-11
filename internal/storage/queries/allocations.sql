@@ -73,7 +73,7 @@ SELECT * FROM allocation_entries WHERE request_id=?;
 -- name: AllocationHasEntries :one
 SELECT EXISTS(SELECT 1 FROM allocation_entries WHERE scheme_id=?);
 -- name: FinishAllocationEntry :exec
-UPDATE allocation_entries SET finished_at=?,state=?,input_tokens=?,output_tokens=?,cached_tokens=?,cost=?,manual=? WHERE request_id=?;
+UPDATE allocation_entries SET finished_at=sqlc.arg(finished_at),state=sqlc.arg(state),input_tokens=sqlc.arg(input_tokens),output_tokens=sqlc.arg(output_tokens),cached_tokens=sqlc.arg(cached_tokens),image_input_tokens=sqlc.arg(image_input_tokens),cost=sqlc.arg(cost),manual=sqlc.arg(manual) WHERE request_id=sqlc.arg(request_id);
 -- name: RecoverAllocationEntries :exec
 UPDATE allocation_entries SET state='pending' WHERE state='active' AND EXISTS(
 SELECT 1 FROM allocation_schemes s JOIN account_groups g ON g.id=s.group_id
@@ -116,3 +116,18 @@ DELETE FROM allocation_entries WHERE rowid IN (
 );
 -- name: AccountHasAllocation :one
 SELECT EXISTS(SELECT 1 FROM group_accounts ga JOIN allocation_schemes s ON s.group_id=ga.group_id WHERE ga.account_id=?);
+
+-- name: AllocationHasActiveEntries :one
+SELECT EXISTS(SELECT 1 FROM allocation_entries WHERE scheme_id=sqlc.arg(scheme_id) AND state='active');
+
+-- name: DeleteAllocationEntries :exec
+DELETE FROM allocation_entries WHERE scheme_id=sqlc.arg(scheme_id);
+
+-- name: DeleteAllocationKeys :exec
+DELETE FROM allocation_keys WHERE scheme_id=sqlc.arg(scheme_id);
+
+-- name: DeleteAllocationRevisions :exec
+DELETE FROM allocation_revisions WHERE scheme_id=sqlc.arg(scheme_id);
+
+-- name: DeleteAllocationScheme :execrows
+DELETE FROM allocation_schemes WHERE id=sqlc.arg(id);

@@ -61,6 +61,8 @@ type Rate struct {
 	Input  int64  `json:"input"`
 	Cached int64  `json:"cached"`
 	Output int64  `json:"output"`
+	// ImageInput charges image input tokens of image models; zero falls back to Input.
+	ImageInput int64 `json:"image_input,omitempty"`
 }
 type Config struct {
 	Mode      string            `json:"mode"`
@@ -240,7 +242,7 @@ func normalize(c *Config) error {
 		}
 		models[model] = true
 		c.Rates[i].Model = model
-		if r.Input <= 0 || r.Cached < 0 || r.Output <= 0 || r.Input > 1_000_000_000 || r.Cached > 1_000_000_000 || r.Output > 1_000_000_000 {
+		if r.Input <= 0 || r.Cached < 0 || r.Output <= 0 || r.ImageInput < 0 || r.Input > 1_000_000_000 || r.Cached > 1_000_000_000 || r.Output > 1_000_000_000 || r.ImageInput > 1_000_000_000 {
 			return ErrInput
 		}
 	}
@@ -674,7 +676,7 @@ func (s *Service) applyPrices(ctx context.Context, q *db.Queries, groupID int64,
 	config.Rates = make([]Rate, 0, len(ids))
 	for _, model := range ids {
 		if price, ok := s.pricing.Lookup(model); ok {
-			config.Rates = append(config.Rates, Rate{Model: model, Input: price.Input, Cached: price.Cached, Output: price.Output})
+			config.Rates = append(config.Rates, Rate{Model: model, Input: price.Input, Cached: price.Cached, Output: price.Output, ImageInput: price.ImageInput})
 			continue
 		}
 		if rate, ok := previousByModel[model]; ok {
@@ -687,12 +689,21 @@ func (s *Service) applyPrices(ctx context.Context, q *db.Queries, groupID int64,
 	return &catalog, nil
 }
 func Cost(r Rate, input, output, cached int64) (int64, error) {
-	if input < 0 || output < 0 || cached < 0 || cached > input || input > 1_000_000_000 || output > 1_000_000_000 {
+	return CostWithImages(r, input, 0, output, cached)
+}
+
+// CostWithImages settles input by modality: imageInput tokens are part of input and use the image rate.
+func CostWithImages(r Rate, input, imageInput, output, cached int64) (int64, error) {
+	if input < 0 || output < 0 || cached < 0 || imageInput < 0 || cached+imageInput > input || input > 1_000_000_000 || output > 1_000_000_000 {
 		return 0, ErrInput
+	}
+	imageRate := r.ImageInput
+	if imageRate == 0 {
+		imageRate = r.Input
 	}
 	// Round only after summing all token categories; even sub-micro charges remain nonzero.
 	sum := new(big.Int)
-	for _, v := range [][2]int64{{input - cached, r.Input}, {cached, r.Cached}, {output, r.Output}} {
+	for _, v := range [][2]int64{{input - cached - imageInput, r.Input}, {imageInput, imageRate}, {cached, r.Cached}, {output, r.Output}} {
 		if v[1] < 0 {
 			return 0, ErrInput
 		}
@@ -707,6 +718,51 @@ func Cost(r Rate, input, output, cached int64) (int64, error) {
 }
 
 // Access toggles never depend on upstream availability or rewrite the policy revision.
+// ErrInFlight blocks deletion while admitted requests still hold allowance reservations.
+var ErrInFlight = errors.New("allocation_in_flight")
+
+// Delete removes an allowance with its revisions, key bindings and budget ledger in one audited
+// transaction. Request history and usage aggregates are stored separately and are retained.
+// Keys that were bound to it keep their resource group and are no longer budget-limited.
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+	if _, err := q.GetTenantAllocationScheme(ctx, db.GetTenantAllocationSchemeParams{ID: id, TenantID: s.tenantID}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	active, err := q.AllocationHasActiveEntries(ctx, id)
+	if err != nil {
+		return err
+	}
+	if active {
+		return ErrInFlight
+	}
+	// Children first: entries reference revisions, and every child references the scheme.
+	for _, remove := range []func(context.Context, int64) error{q.DeleteAllocationEntries, q.DeleteAllocationKeys, q.DeleteAllocationRevisions} {
+		if err := remove(ctx, id); err != nil {
+			return err
+		}
+	}
+	removed, err := q.DeleteAllocationScheme(ctx, id)
+	if err != nil {
+		return err
+	}
+	if removed != 1 {
+		return ErrNotFound
+	}
+	if err := audit.Record(ctx, q, "allocation.delete", "allocation", audit.ID(id)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Service) SetEnabled(ctx context.Context, id int64, enabled bool) error {
 	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {

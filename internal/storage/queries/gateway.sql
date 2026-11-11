@@ -1,11 +1,20 @@
 -- name: CountAccountAffinity :one
 SELECT count(*) FROM account_affinity;
 
+-- name: CountDerivedAffinity :one
+SELECT count(*) FROM account_affinity WHERE derived = 1;
+
+-- name: EvictDerivedAffinity :execrows
+-- Explicit bindings may displace the derived preference closest to expiry.
+DELETE FROM account_affinity WHERE rowid = (
+  SELECT rowid FROM account_affinity WHERE derived = 1 ORDER BY expires_at, rowid LIMIT 1
+);
+
 -- name: PruneAccountAffinity :exec
 DELETE FROM account_affinity WHERE expires_at <= sqlc.arg(now);
 
 -- name: CreateAccountAffinity :exec
-INSERT INTO account_affinity(user_id, group_id, session_hash, provider, account_id, expires_at, model, rebound) VALUES (sqlc.arg(user_id), sqlc.arg(group_id), sqlc.arg(session_hash), sqlc.arg(provider), sqlc.arg(account_id), sqlc.arg(expires_at), sqlc.arg(model), sqlc.arg(rebound));
+INSERT INTO account_affinity(user_id, group_id, session_hash, provider, account_id, expires_at, model, rebound, derived) VALUES (sqlc.arg(user_id), sqlc.arg(group_id), sqlc.arg(session_hash), sqlc.arg(provider), sqlc.arg(account_id), sqlc.arg(expires_at), sqlc.arg(model), sqlc.arg(rebound), sqlc.arg(derived));
 
 -- name: TouchAccountAffinity :exec
 UPDATE account_affinity SET expires_at = sqlc.arg(expires_at), model = sqlc.arg(model)

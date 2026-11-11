@@ -37,6 +37,8 @@ func (h *keyHTTP) registerGateway(router chi.Router) {
 		openai.Post("/responses", func(w http.ResponseWriter, r *http.Request) { h.proxy(w, r, gateway.Responses) })
 		openai.Post("/responses/compact", func(w http.ResponseWriter, r *http.Request) { h.proxy(w, r, gateway.Compact) })
 		openai.Post("/chat/completions", func(w http.ResponseWriter, r *http.Request) { h.proxy(w, r, gateway.Chat) })
+		openai.Post("/images/generations", func(w http.ResponseWriter, r *http.Request) { h.proxy(w, r, gateway.Images) })
+		openai.Post("/images/edits", func(w http.ResponseWriter, r *http.Request) { h.proxy(w, r, gateway.ImageEdits) })
 	})
 	router.Route("/messages", func(messages chi.Router) {
 		messages.Use(nativeIdentity, h.requireMessagesKey)
@@ -113,7 +115,9 @@ func (h *keyHTTP) proxy(w http.ResponseWriter, r *http.Request, kind gateway.Kin
 	}
 	defer release()
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || media != "application/json" {
+	// OpenAI SDKs send image edits as multipart uploads; they are converted to JSON after the bounded read.
+	multipartEdit := err == nil && kind == gateway.ImageEdits && media == "multipart/form-data"
+	if err != nil || media != "application/json" && !multipartEdit {
 		recordRejection("json_required")
 		writeError(w, 415, "json_required")
 		return
@@ -148,6 +152,14 @@ func (h *keyHTTP) proxy(w http.ResponseWriter, r *http.Request, kind gateway.Kin
 		}
 		return
 	}
+	if multipartEdit {
+		if raw, err = upstream.MultipartImageEdit(raw, r.Header.Get("Content-Type")); err != nil {
+			logGatewayRejection(r.Context(), "http", "image_edit_form", err)
+			recordRejection("invalid_request")
+			fail(w, err)
+			return
+		}
+	}
 	var flags struct {
 		Stream bool `json:"stream"`
 	}
@@ -173,7 +185,7 @@ func (h *keyHTTP) proxy(w http.ResponseWriter, r *http.Request, kind gateway.Kin
 		fail(w, upstream.ErrInput)
 		return
 	}
-	if kind == gateway.Compact && flags.Stream {
+	if (kind == gateway.Compact || kind.IsImage()) && flags.Stream {
 		logGatewayRejection(r.Context(), "http", "compact_stream", upstream.ErrInput)
 		recordRejection("invalid_request")
 		fail(w, upstream.ErrInput)
@@ -195,9 +207,13 @@ func (h *keyHTTP) proxy(w http.ResponseWriter, r *http.Request, kind gateway.Kin
 		fail(w, &upstream.UpstreamError{Status: result.StatusCode, RetryAfter: result.Header.Get("Retry-After")})
 		return
 	}
-	if kind == gateway.Compact || (kind == gateway.Messages || kind.IsGemini()) && !flags.Stream {
-		data, err := io.ReadAll(io.LimitReader(result.Body, upstream.MaxBody+1))
-		if err != nil || len(data) > upstream.MaxBody || !json.Valid(data) {
+	if kind == gateway.Compact || kind.IsImage() || (kind == gateway.Messages || kind.IsGemini()) && !flags.Stream {
+		limit := upstream.MaxBody
+		if kind.IsImage() {
+			limit = upstream.MaxImageBody
+		}
+		data, err := io.ReadAll(io.LimitReader(result.Body, int64(limit)+1))
+		if err != nil || len(data) > limit || !json.Valid(data) {
 			result.Fail(upstream.ErrResponse)
 			fail(w, upstream.ErrResponse)
 			return
@@ -213,6 +229,7 @@ func (h *keyHTTP) proxy(w http.ResponseWriter, r *http.Request, kind gateway.Kin
 				return
 			}
 		} else {
+			// Compaction and Images responses both report Responses-style top-level token usage.
 			result.AcceptCompact(data)
 		}
 		writeRawJSON(w, data)

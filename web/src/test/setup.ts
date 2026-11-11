@@ -18,6 +18,11 @@ Object.defineProperty(window, 'matchMedia', {
 Object.defineProperty(window, 'scrollTo', { value: vi.fn(), writable: true })
 afterEach(async () => {
   cleanup()
+  // Radix FocusScope restores focus from a zero-delay timer after a dialog unmounts. Let it run
+  // while this document still exists; otherwise it can fire into a torn-down jsdom window and
+  // surface as an intermittent unhandled "dispatchEvent ... is not of type 'Event'" error.
+  vi.useRealTimers()
+  await new Promise((resolve) => setTimeout(resolve, 0))
   localStorage.clear()
   await i18n.changeLanguage('en')
 })

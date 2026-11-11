@@ -31,3 +31,6 @@ UPDATE accounts SET status = sqlc.arg(status), updated_at = sqlc.arg(updated_at)
 
 -- name: DeleteAccount :execrows
 DELETE FROM accounts WHERE id = sqlc.arg(id) AND tenant_id = sqlc.arg(tenant_id);
+
+-- name: RenameAccount :exec
+UPDATE accounts SET name = sqlc.arg(name), updated_at = sqlc.arg(updated_at) WHERE id = sqlc.arg(id) AND tenant_id = sqlc.arg(tenant_id);

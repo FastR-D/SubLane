@@ -14,6 +14,8 @@ sql:
         overrides:
           - column: "account_affinity.rebound"
             go_type: "bool"
+          - column: "account_affinity.derived"
+            go_type: "bool"
           - column: "users.enabled"
             go_type: "bool"
           - column: "accounts.enabled"
@@ -23,4 +25,6 @@ sql:
           - column: "api_keys.enabled"
             go_type: "bool"
           - column: "account_groups.restricted_models"
+            go_type: "bool"
+          - column: "account_groups.session_sticky"
             go_type: "bool"

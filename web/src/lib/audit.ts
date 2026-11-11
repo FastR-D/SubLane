@@ -21,6 +21,7 @@ export const auditActions: Record<string, keyof typeof en> = {
   'key.revoke': 'auditKeyRevoke',
   'group.create': 'auditGroupCreate',
   'group.update': 'auditGroupUpdate',
+  'group.delete': 'auditGroupDelete',
   'member.create': 'auditMemberCreate',
   'member.update': 'auditMemberUpdate',
   'member.remove': 'auditMemberRemove',

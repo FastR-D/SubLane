@@ -103,3 +103,8 @@ export function openCCSwitch(link: string) {
   // Use only the local app protocol. Never send a credential-bearing link to a web relay or history API.
   window.location.assign(link)
 }
+
+// Built-in Codex image models are routed only through /v1/images.
+export function isImageModel(id: string) {
+  return /^(?:[a-z]+\/)?gpt-image-/i.test(id.trim())
+}

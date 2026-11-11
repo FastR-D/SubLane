@@ -1145,7 +1145,6 @@ export const en = {
   apiUpstreamProxyHint:
     'Model discovery and generation use the selected server network route.',
   connectAPI: 'Connect API',
-  replaceAPIKey: 'Replace API key',
   upstreamBaseURL: 'Base URL',
   upstreamAPIKey: 'Upstream API key',
   apiUpstreamDescription:
@@ -1160,7 +1159,7 @@ export const en = {
   upstreamBaseURLInvalid:
     'Enter an HTTP or HTTPS base URL without login credentials, query parameters or a fragment.',
   apiUpstreamUsageHint:
-    'Request and token usage is tracked by SubLane. Subscription quota and upstream balances are unavailable for API channels.',
+    'Request and token usage is tracked by SubLane. Upstream quota is shown for OpenCode Go channels; other API channels do not report subscription quota or balances.',
   apiKeyReplacementHint:
     'The upstream rejected this key. Replace the API key, then verify the connection.',
   connectionMethod: 'Connection method',
@@ -1775,8 +1774,6 @@ export const en = {
   proxyConnectionFailed: 'Connection failed',
   proxyLookupUnavailable: 'Location lookup unavailable',
   proxyLookupRateLimited: 'Location lookup rate limited',
-  proxyExitIP: 'Exit IP: {{ip}}',
-  proxyLocation: 'Location: {{location}}',
   proxyLocationUnknown: 'Unknown',
   proxyLatency: '{{latency}} ms',
   proxyChanged: 'The proxy changed during the test. Run it again.',
@@ -1919,4 +1916,80 @@ export const en = {
   requestRouteCooldown: 'Resource or model cooldown',
   requestRouteConcurrency: 'Concurrency capacity',
   requestRouteUnavailable: 'Disabled or unavailable resource',
+  auditGroupDelete: 'Deleted resource group',
+  deleteGroup: 'Delete group',
+  deleteGroupNamed: 'Delete {{name}}',
+  deleteGroupTitle: 'Delete resource group?',
+  deleteGroupDescription:
+    '“{{name}}” will stop routing requests and lose its resources, model policy and member grants. Request history and usage are kept.',
+  groupDeleteInUse:
+    'Active API keys still use this group. Move them to another group or revoke them first.',
+  groupDeleteAllocated:
+    'This group has a resource allowance. Delete the allowance before deleting the group.',
+  groupDeleteMissing: 'This group no longer exists.',
+  groupDeleteFailed: 'The group could not be deleted. Try again.',
+  sessionSticky: 'Session stickiness',
+  sessionStickyHint:
+    'Keeps conversations without a session ID on one resource, using a hash of the opening prompt, and lets subagents prefer their parent’s resource. Unavailable resources still fail over. Improves upstream prompt cache hits.',
+  sessionStickyEnabled: 'Session stickiness on',
+  editChannel: 'Edit channel',
+  channelKeyKeepHint:
+    'Leave blank to keep the stored key. The stored key is never shown.',
+  saveChannel: 'Save channel',
+  usageMonthly: 'Monthly limit',
+  allocationDelete: 'Delete resource allowance',
+  allocationDeleteNamed: 'Delete resource allowance {{name}}',
+  allocationDeleteTitle: 'Delete resource allowance?',
+  allocationDeleteDescription:
+    '“{{name}}” and its budget rules, price snapshots and allowance ledger will be deleted. Keys bound to it keep working in their resource group without a budget limit. Request history and usage statistics are kept.',
+  allocationDeleteInFlight:
+    'Requests using this allowance are still running. Try again when they finish.',
+  allocationDeleteMissing: 'This resource allowance no longer exists.',
+  allocationDeleteFailed:
+    'The resource allowance could not be deleted. Try again.',
+  proxyExitIPLabel: 'Exit IP',
+  proxyLocationLabel: 'Location',
+  ipReportLabel: 'IP report for {{name}}',
+  ipReportOpen: 'Open the full report',
+  ipReportRefresh: 'Refresh IP report',
+  ipReportRefreshNamed: 'Refresh IP report for {{name}}',
+  ipReportNeedsCheck: 'Test the connection to see the exit IP report.',
+  ipReportLoading: 'Loading IP report…',
+  ipReportRateLimited:
+    'The IP report service is rate limited. Try again later.',
+  ipReportUnsupported: 'No public report is available for this exit IP.',
+  ipReportFailed: 'The IP report could not be loaded.',
+  ipReportMobile: 'Mobile network',
+  ipReportResidential: 'Residential',
+  ipReportDatacenter: 'Data center',
+  ipReportBusiness: 'Business',
+  ipReportISP: 'ISP',
+  ipReportUnknownType: 'Unknown type',
+  ipReportVPN: 'VPN',
+  ipReportProxy: 'Proxy',
+  ipReportTor: 'Tor',
+  ipReportAbuser: 'Abuse reports',
+  ipReportCrawler: 'Crawler',
+  ipReportScoreUnknown: 'No score',
+  ipReportScore: 'IP purity score',
+  ipReportNoRisk: 'No risk flags',
+  ipReportVerdictLabel: 'Verdict',
+  ipReportPristine: 'Pristine',
+  ipReportClean: 'Clean',
+  ipReportGood: 'Good',
+  ipReportNeutral: 'Neutral',
+  ipReportSuspicious: 'Suspicious',
+  proxyNetworkLabel: 'Network',
+  proxyBoundAccounts: 'Bound accounts',
+  proxyCheckedAt: 'Checked {{time}}',
+  channelEditDescription:
+    'Rename the channel or replace its key. To use another endpoint or protocol, add a new channel so the stored key never reaches a different upstream.',
+  ipReportLookup: 'Check IP purity',
+  ipReportLookupNamed: 'Check IP purity for {{name}}',
+  ipReportLookupHint: 'Checking sends this exit IP to ip.net.coffee.',
+  ipReportPageHint:
+    'IP purity is looked up only when you request it; ip.net.coffee then receives that exit IP, and results are cached for six hours.',
+  allocationImageInputM: 'Image input · M',
+  allocationImageInputHint:
+    'For image model requests: the image share of input tokens, charged at the image input rate. Leave empty otherwise.',
 } satisfies Record<string, string>

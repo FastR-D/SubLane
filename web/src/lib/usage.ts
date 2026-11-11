@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ApiError, request } from './request'
 
 const windowSchema = z.object({
-  kind: z.enum(['primary', 'secondary', 'model']),
+  kind: z.enum(['primary', 'secondary', 'monthly', 'model']),
   used_percent: z.number().nonnegative().nullable(),
   window_seconds: z.number().int().positive().nullable(),
   reset_at: z.number().int().nonnegative().nullable(),
@@ -22,7 +22,7 @@ const usageSchema = z.object({
         name: z.string(),
         allowed: z.boolean().nullable(),
         limit_reached: z.boolean().nullable(),
-        windows: z.array(windowSchema).max(2),
+        windows: z.array(windowSchema).max(3),
       }),
     )
     .max(128),
@@ -128,11 +128,13 @@ export function usageReasonKey(error: unknown) {
       return 'usageReasonUnknown'
   }
 }
-export function usageOptions(id: string) {
+// Subscription accounts and API channels share one quota cache keyed by the resource ID.
+export type UsageResource = 'accounts' | 'channels'
+export function usageOptions(id: string, resource: UsageResource = 'accounts') {
   return queryOptions({
     queryKey: ['accounts', 'usage', id],
     queryFn: ({ signal }: { signal: AbortSignal }) =>
-      request(`/api/accounts/${encodeURIComponent(id)}/usage`, usageSchema, {
+      request(`/api/${resource}/${encodeURIComponent(id)}/usage`, usageSchema, {
         signal,
       }),
     staleTime: 60_000,
@@ -145,9 +147,9 @@ export function usageOptions(id: string) {
   })
 }
 
-export function refreshUsage(id: string) {
+export function refreshUsage(id: string, resource: UsageResource = 'accounts') {
   return request(
-    `/api/accounts/${encodeURIComponent(id)}/usage/refresh`,
+    `/api/${resource}/${encodeURIComponent(id)}/usage/refresh`,
     usageSchema,
     { method: 'POST', body: '{}' },
   )

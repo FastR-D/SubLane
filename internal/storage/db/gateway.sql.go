@@ -20,8 +20,19 @@ func (q *Queries) CountAccountAffinity(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countDerivedAffinity = `-- name: CountDerivedAffinity :one
+SELECT count(*) FROM account_affinity WHERE derived = 1
+`
+
+func (q *Queries) CountDerivedAffinity(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDerivedAffinity)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAccountAffinity = `-- name: CreateAccountAffinity :exec
-INSERT INTO account_affinity(user_id, group_id, session_hash, provider, account_id, expires_at, model, rebound) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+INSERT INTO account_affinity(user_id, group_id, session_hash, provider, account_id, expires_at, model, rebound, derived) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 `
 
 type CreateAccountAffinityParams struct {
@@ -33,6 +44,7 @@ type CreateAccountAffinityParams struct {
 	ExpiresAt   int64
 	Model       string
 	Rebound     bool
+	Derived     bool
 }
 
 func (q *Queries) CreateAccountAffinity(ctx context.Context, arg CreateAccountAffinityParams) error {
@@ -45,8 +57,24 @@ func (q *Queries) CreateAccountAffinity(ctx context.Context, arg CreateAccountAf
 		arg.ExpiresAt,
 		arg.Model,
 		arg.Rebound,
+		arg.Derived,
 	)
 	return err
+}
+
+const evictDerivedAffinity = `-- name: EvictDerivedAffinity :execrows
+DELETE FROM account_affinity WHERE rowid = (
+  SELECT rowid FROM account_affinity WHERE derived = 1 ORDER BY expires_at, rowid LIMIT 1
+)
+`
+
+// Explicit bindings may displace the derived preference closest to expiry.
+func (q *Queries) EvictDerivedAffinity(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, evictDerivedAffinity)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const listResourceGroups = `-- name: ListResourceGroups :many

@@ -8,6 +8,7 @@ import {
   usagePace,
   usageReasonKey,
   type UsagePace,
+  type UsageResource,
   type UsageWindow,
 } from '@/lib/usage'
 import { cn } from '@/lib/cn'
@@ -20,18 +21,21 @@ export function AccountUsage({
   id,
   name,
   provider,
+  resource = 'accounts',
 }: {
   id: string
   name: string
   provider: Provider
+  resource?: UsageResource
 }) {
   const { t, i18n } = useTranslation()
   const timeZone = useTimeZone()
   const client = useQueryClient()
-  const query = useQuery(usageOptions(id))
+  const query = useQuery(usageOptions(id, resource))
   const refresh = useMutation({
-    mutationFn: () => refreshUsage(id),
-    onSuccess: (data) => client.setQueryData(usageOptions(id).queryKey, data),
+    mutationFn: () => refreshUsage(id, resource),
+    onSuccess: (data) =>
+      client.setQueryData(usageOptions(id, resource).queryKey, data),
   })
   const [now, setNow] = useState(() => Date.now())
   const [expanded, setExpanded] = useState(false)
@@ -240,7 +244,9 @@ function QuotaWindow({
             ? 'usageModel'
             : window.kind === 'primary'
               ? 'usagePrimary'
-              : 'usageSecondary',
+              : window.kind === 'monthly'
+                ? 'usageMonthly'
+                : 'usageSecondary',
         )
       : seconds % 86400 === 0
         ? t('usageDays', { count: seconds / 86400 })
