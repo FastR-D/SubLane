@@ -117,6 +117,64 @@ func TestRefreshRejectionSurvivesLaterRequestsAndRestart(t *testing.T) {
 	}
 }
 
+func TestRefreshPersistsRotationWhenCallerCancels(t *testing.T) {
+	s, account, now := refreshFixture(t, "codex", time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	credential, err := s.Prepare(ctx, account.ID, func(refreshCtx context.Context, c Credential) (Credential, error) {
+		// The provider has consumed the old refresh token before the caller disconnects.
+		cancel()
+		if err := refreshCtx.Err(); err != nil {
+			t.Errorf("caller cancellation interrupted credential rotation: %v", err)
+		}
+		if deadline, ok := refreshCtx.Deadline(); !ok || time.Until(deadline) > time.Minute {
+			t.Error("credential rotation must have an independent bounded deadline")
+		}
+		c.AccessToken, c.RefreshToken = "synthetic-new", "synthetic-rotated"
+		c.ExpiresAt = now.Add(time.Hour).Unix()
+		return c, nil
+	})
+	if !errors.Is(err, context.Canceled) || credential.AccessToken != "" {
+		t.Fatalf("canceled caller received a usable credential: %v", err)
+	}
+	restarted := New(s.db, s.vault)
+	restarted.now = s.now
+	c, err := restarted.Prepare(context.Background(), account.ID, nil)
+	if err != nil || c.AccessToken != "synthetic-new" || c.RefreshToken != "synthetic-rotated" {
+		t.Fatalf("caller cancellation lost the durable rotation: %v", err)
+	}
+}
+
+func TestRefreshPersistsReauthorizationWhenCallerCancels(t *testing.T) {
+	s, account, _ := refreshFixture(t, "codex", time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, err := s.Prepare(ctx, account.ID, func(context.Context, Credential) (Credential, error) {
+		cancel()
+		return Credential{}, ErrReauthorize
+	})
+	if !errors.Is(err, ErrReauthorize) {
+		t.Fatalf("permanent credential failure was lost: %v", err)
+	}
+	saved, err := s.Get(context.Background(), account.ID)
+	if err != nil || saved.Status != "reauth_required" {
+		t.Fatalf("caller cancellation lost permanent credential failure: status=%s err=%v", saved.Status, err)
+	}
+}
+
+func TestRefreshDoesNotStartForCanceledCaller(t *testing.T) {
+	s, account, _ := refreshFixture(t, "codex", time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c, err := s.Prepare(ctx, account.ID, func(context.Context, Credential) (Credential, error) {
+		t.Fatal("canceled caller started credential rotation")
+		return Credential{}, nil
+	})
+	if !errors.Is(err, context.Canceled) || c.AccessToken != "" {
+		t.Fatalf("canceled caller received a usable credential: %v", err)
+	}
+}
+
 func TestRefreshFallbackPreservesCredentialSafeguards(t *testing.T) {
 	for _, tc := range []struct {
 		name, provider string

@@ -109,18 +109,22 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken string, refresh
 		return Credential{}, ErrRefresh
 	}
 	// Refresh and administrator writes share this owner. Publish rotated credentials only after persistence.
+	// Once rotation starts, a disconnected caller must not discard a consumed refresh token's replacement.
+	// Keep provider IO and persistence synchronous and bounded under the same independent context.
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer cancel()
 	deviceID := claudeDeviceID(credential.Metadata)
-	updated, err := refresh(ctx, credential)
-	if ctx.Err() != nil {
-		return Credential{}, ctx.Err()
-	}
+	updated, err := refresh(refreshCtx, credential)
 	if err != nil {
 		if errors.Is(err, ErrReauthorize) {
-			if saveErr := s.queries.SetAccountStatus(ctx, db.SetAccountStatusParams{ID: id, Status: "reauth_required", UpdatedAt: s.now().Unix()}); saveErr != nil {
+			if saveErr := s.queries.SetAccountStatus(refreshCtx, db.SetAccountStatusParams{ID: id, Status: "reauth_required", UpdatedAt: s.now().Unix()}); saveErr != nil {
 				return Credential{}, saveErr
 			}
 			delete(s.refreshes, id)
 			return Credential{}, ErrReauthorize
+		}
+		if ctx.Err() != nil {
+			return Credential{}, ctx.Err()
 		}
 		if errors.Is(err, context.Canceled) {
 			return Credential{}, err
@@ -137,11 +141,14 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken string, refresh
 		return Credential{}, err
 	}
 	updated.Rejected = false
-	if err := s.persist(ctx, s.queries, id, updated, "ready"); err != nil {
+	if err := s.persist(refreshCtx, s.queries, id, updated, "ready"); err != nil {
 		s.deferRefresh(id, err, false)
 		return Credential{}, err
 	}
 	delete(s.refreshes, id)
+	if ctx.Err() != nil {
+		return Credential{}, ctx.Err()
+	}
 	updated.ProxyURL = credential.ProxyURL
 	return updated, nil
 }
