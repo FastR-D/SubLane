@@ -32,8 +32,8 @@ func catalogSource(provider, version string) string {
 	}
 	source := provider + ":v2"
 	if provider == "codex" {
-		// Older snapshots discarded optional capability metadata and must be rediscovered.
-		source = "codex:v3:" + version
+		// Older snapshots lack capability metadata or built-in image models and must be rediscovered.
+		source = "codex:v4:" + version
 	}
 	if provider == "antigravity" {
 		source = "antigravity:v3"

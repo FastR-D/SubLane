@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
 	"github.com/murongg/SubLane/internal/tenants"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/turnstile"
 	"github.com/murongg/SubLane/internal/vault"
 )
@@ -18,7 +18,7 @@ import (
 func TestTurnstileSettingsAndLoginBoundary(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	conn, err := storage.Open(ctx, filepath.Join(dir, "synthetic.db"))
+	conn, err := testdb.Open(ctx, filepath.Join(dir, "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

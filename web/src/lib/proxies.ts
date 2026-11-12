@@ -103,3 +103,79 @@ export function proxyImportErrorKey(error: unknown) {
   }
   return proxyErrorKey(error)
 }
+
+const ipReportSchema = z.object({
+  ip: z.string().max(45),
+  trust_score: z.number().int().min(0).max(100).nullable(),
+  company_type: z.string().max(32).default(''),
+  residential: z.boolean(),
+  datacenter: z.boolean(),
+  mobile: z.boolean(),
+  vpn: z.boolean(),
+  proxy: z.boolean(),
+  tor: z.boolean(),
+  abuser: z.boolean(),
+  crawler: z.boolean(),
+  asn: z.number().int().nonnegative(),
+  as_organization: z.string().max(128).default(''),
+  isp: z.string().max(128).default(''),
+  country_code: z.string().max(2).default(''),
+  country: z.string().max(64).default(''),
+  region: z.string().max(64).default(''),
+  city: z.string().max(64).default(''),
+  verdict: z.string().max(48).default(''),
+})
+export type IPReport = z.infer<typeof ipReportSchema>
+
+// Reading only returns a report the server already holds; it never discloses the exit IP.
+// The key changes when a check observes a new exit.
+export function ipReportOptions(id: string, ip: string) {
+  return {
+    queryKey: ['proxy-ip-report', id, ip],
+    queryFn: async ({ signal }: { signal: AbortSignal }) => {
+      try {
+        return await request(
+          `/api/proxies/${encodeURIComponent(id)}/ip-report`,
+          ipReportSchema,
+          { signal },
+        )
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'ip_report_not_loaded')
+          return null
+        throw error
+      }
+    },
+    staleTime: 6 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  }
+}
+
+// Explicit administrator action: sends the proxy's exit IP to ip.net.coffee.
+export function refreshIPReport(id: string) {
+  return request(
+    `/api/proxies/${encodeURIComponent(id)}/ip-report/refresh`,
+    ipReportSchema,
+    { method: 'POST', body: '{}' },
+  )
+}
+
+export function ipReportErrorKey(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === 'ip_report_rate_limited') return 'ipReportRateLimited'
+    if (error.code === 'ip_report_unsupported') return 'ipReportUnsupported'
+  }
+  return 'ipReportFailed'
+}
+
+// Tiers match ip.net.coffee's scoring page so a card and the full report agree.
+export function ipScoreTier(score: number | null) {
+  if (score === null)
+    return { tone: 'neutral', label: 'ipReportScoreUnknown' } as const
+  if (score >= 95)
+    return { tone: 'success', label: 'ipReportPristine' } as const
+  if (score >= 80) return { tone: 'success', label: 'ipReportClean' } as const
+  if (score >= 50) return { tone: 'info', label: 'ipReportGood' } as const
+  if (score >= 25) return { tone: 'warning', label: 'ipReportNeutral' } as const
+  return { tone: 'error', label: 'ipReportSuspicious' } as const
+}

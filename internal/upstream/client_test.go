@@ -292,7 +292,7 @@ func TestDiscoveryCapturesOneConfiguredVersion(t *testing.T) {
 	}))
 	client.version = func() string { return current.Load().(string) }
 	value, err := client.Discover(context.Background(), accounts.Credential{AccessToken: "synthetic-access", AccountID: "synthetic-account"})
-	if err != nil || value.Source != "codex:v3:0.200.0" || client.CatalogSource("codex") != "codex:v3:0.300.0" {
+	if err != nil || value.Source != "codex:v4:0.200.0" || client.CatalogSource("codex") != "codex:v4:0.300.0" {
 		t.Fatal("in-flight response was mislabeled with a newer version", value, err)
 	}
 }

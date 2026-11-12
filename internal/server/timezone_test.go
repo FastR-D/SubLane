@@ -8,13 +8,13 @@ import (
 
 	"github.com/murongg/SubLane/internal/audit"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/timezone"
 )
 
 func TestTimeZoneSettingIsGlobalAndPlatformOwnerOnly(t *testing.T) {
 	ctx := context.Background()
-	conn, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
+	conn, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

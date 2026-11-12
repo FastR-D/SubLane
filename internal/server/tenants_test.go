@@ -12,12 +12,12 @@ import (
 
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/gateway"
-	"github.com/murongg/SubLane/internal/storage"
 	"github.com/murongg/SubLane/internal/tenants"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func TestWorkspaceHTTPRequiresLoginAndListsOwnedWorkspaces(t *testing.T) {
-	connection, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "synthetic.db"))
+	connection, err := testdb.Open(context.Background(), filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestWorkspaceHTTPRequiresLoginAndListsOwnedWorkspaces(t *testing.T) {
 
 func TestWorkspaceRoleComesFromMembership(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestWorkspaceRoleComesFromMembership(t *testing.T) {
 
 func TestPlatformOwnerCanHaveOrdinaryMemberLimitsInAnotherWorkspace(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestPlatformOwnerCanHaveOrdinaryMemberLimitsInAnotherWorkspace(t *testing.T
 
 func TestWorkspaceOwnerCanSetLimitsForEveryRoleIncludingSelf(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic-limits.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic-limits.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

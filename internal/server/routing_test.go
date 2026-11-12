@@ -9,12 +9,12 @@ import (
 	"testing"
 
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func TestRouterGroupsProtectMethodErrorsAndFallbacks(t *testing.T) {
 	ctx := context.Background()
-	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "routing.db"))
+	db, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "routing.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

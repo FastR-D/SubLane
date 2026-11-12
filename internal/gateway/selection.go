@@ -145,6 +145,58 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	if err != nil {
 		return "", digest, err
 	}
+	derived := false
+	if hints, ok := stickyFrom(ctx); ok {
+		sticky := policy.Routing.SessionSticky
+		bindingScope := provider
+		if bindingScope == "" {
+			bindingScope = "auto"
+		}
+		// bound reports whether a key already owns a binding; ambiguous legacy bindings count as bound.
+		bound := func(hash [32]byte) (bool, error) {
+			binding, err := sessionBinding(ctx, q, db.ListSessionAffinitiesParams{GroupID: groupID, UserID: userID, SessionHash: hash[:], Now: s.now().Unix()}, bindingScope)
+			if errors.Is(err, ErrAffinityUnavailable) {
+				return true, nil
+			}
+			return binding != nil, err
+		}
+		normalize := false
+		switch {
+		case hints.Session == "" || session != "" && !hints.Replace:
+		case hints.Derived:
+			// Preferences are the opt-in feature itself and disappear with the setting.
+			normalize = sticky
+		default:
+			// Explicit Claude conversations keep whichever key already holds their binding, whether the
+			// setting is on or off, so provider-held state never moves when the toggle changes.
+			rawBound := false
+			if session != "" {
+				if rawBound, err = bound(digest); err != nil {
+					return "", digest, err
+				}
+			}
+			if !rawBound {
+				normalizedBound, err := bound(sessionDigest(userID, groupID, hints.Session))
+				if err != nil {
+					return "", digest, err
+				}
+				// The setting only decides whether an unbound conversation creates a normalized binding.
+				normalize = normalizedBound || sticky
+			}
+		}
+		if normalize {
+			session, derived = hints.Session, hints.Derived
+			digest = sessionDigest(userID, groupID, session)
+			if derived {
+				// Preferences live in their own namespace so they can never read or rewrite an explicit binding.
+				digest = derivedDigest(userID, groupID, session)
+			}
+		}
+		// Subagents prefer their parent's resource among admitted candidates, as Codex reviews already do.
+		if sticky && parentThread == "" && hints.Parent != "" && hints.Parent != session {
+			parentThread = hints.Parent
+		}
+	}
 	requested := model
 	if provider != "" {
 		requested = provider + "/" + model
@@ -160,10 +212,24 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	}
 	now := s.now().Unix()
 	expires := now + 24*3600
+	if derived {
+		expires = now + derivedAffinitySeconds
+	}
 	bindingModel := upstream.CatalogModelID(model)
 	var replacement *db.ListSessionAffinitiesRow
 	replacementReason := "model"
-	if session != "" {
+	stickyAccount := ""
+	if session != "" && derived {
+		// A derived binding is only a preference: unavailable resources fall back to normal scheduling.
+		existing, err := sessionBinding(ctx, q, db.ListSessionAffinitiesParams{GroupID: groupID, UserID: userID, SessionHash: digest[:], Now: now}, scope)
+		if err != nil && !errors.Is(err, ErrAffinityUnavailable) {
+			return "", digest, err
+		}
+		if existing != nil {
+			stickyAccount, replacement = existing.AccountID, existing
+		}
+	}
+	if session != "" && !derived {
 		existing, err := sessionBinding(ctx, q, db.ListSessionAffinitiesParams{GroupID: groupID, UserID: userID, SessionHash: digest[:], Now: now}, scope)
 		if err != nil {
 			return "", digest, err
@@ -190,7 +256,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 			if !policy.AllowsProvider(bound.Provider) {
 				return id, digest, ErrAffinityUnavailable
 			}
-			if kind == Compact && bound.Provider != "codex" {
+			if kind.codexOnly() && bound.Provider != "codex" {
 				return id, digest, upstream.ErrInput
 			}
 			admissionErr := s.accountAdmission(*bound)
@@ -244,7 +310,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 					bindingModel = existing.Model
 				}
 				if existing.Provider != scope {
-					if err := rememberAffinity(ctx, q, userID, groupID, digest, scope, id, bindingModel, now, expires, existing.Rebound); err != nil {
+					if err := rememberAffinity(ctx, q, userID, groupID, digest, scope, id, bindingModel, now, expires, existing.Rebound, false); err != nil {
 						return "", digest, err
 					}
 				}
@@ -265,13 +331,20 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	parentAccount := ""
 	if parentThread != "" && affinity != continuationAffinity {
 		// Resolve only in the authenticated user's pool; parent hints never contain trusted account IDs.
-		hash := sessionDigest(userID, groupID, parentThread)
-		binding, err := sessionBinding(ctx, q, db.ListSessionAffinitiesParams{GroupID: groupID, UserID: userID, SessionHash: hash[:], Now: now}, "auto")
-		if err != nil && !errors.Is(err, ErrAffinityUnavailable) {
-			return "", digest, err
+		// Parent lookups are read-only: an explicit parent binding wins, then a derived parent preference.
+		hashes := [][32]byte{sessionDigest(userID, groupID, parentThread)}
+		if policy.Routing.SessionSticky {
+			hashes = append(hashes, derivedDigest(userID, groupID, parentThread))
 		}
-		if binding != nil {
-			parentAccount = binding.AccountID
+		for _, hash := range hashes {
+			binding, err := sessionBinding(ctx, q, db.ListSessionAffinitiesParams{GroupID: groupID, UserID: userID, SessionHash: hash[:], Now: now}, "auto")
+			if err != nil && !errors.Is(err, ErrAffinityUnavailable) {
+				return "", digest, err
+			}
+			if binding != nil {
+				parentAccount = binding.AccountID
+				break
+			}
 		}
 	}
 	candidates := make([]string, 0, len(available))
@@ -282,7 +355,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	var coolingModel string
 	var allocationErr error
 	for _, account := range available {
-		if !s.accounts.ProviderEnabled(account.Provider) || !policy.AllowsProvider(account.Provider) || !allowed[account.ID] || !account.Enabled || account.Status == "reauth_required" || (provider != "" && account.Provider != provider) || (kind == Compact && account.Provider != "codex") {
+		if !s.accounts.ProviderEnabled(account.Provider) || !policy.AllowsProvider(account.Provider) || !allowed[account.ID] || !account.Enabled || account.Status == "reauth_required" || (provider != "" && account.Provider != provider) || (kind.codexOnly() && account.Provider != "codex") {
 			if !s.accounts.ProviderEnabled(account.Provider) || !account.Enabled || account.Status == "reauth_required" {
 				if v := statuses[account.ID]; v != nil {
 					v.State = "unavailable"
@@ -378,6 +451,10 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		if account.ID == parentAccount {
 			rank = -1
 		}
+		// The conversation's own sticky resource outranks its parent's.
+		if account.ID == stickyAccount {
+			rank = -2
+		}
 		if rank < bestRank {
 			candidates = candidates[:0]
 			bestRank = rank
@@ -432,7 +509,7 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		return candidates[0], digest, nil
 	}
 	id := candidates[0]
-	if id != parentAccount {
+	if id != parentAccount && id != stickyAccount {
 		if s.policy.QuotaWeighted {
 			route.Strategy = "quota_weighted"
 		}
@@ -445,12 +522,20 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 		route.Strategy = "parent"
 		route.ParentFallback = false
 	}
+	if stickyAccount != "" && id == stickyAccount {
+		route.Strategy = "affinity"
+		route.ParentFallback = false
+	}
 	if session != "" {
 		if replacement != nil && replacement.Provider == scope {
 			err = q.ReplaceAccountAffinity(ctx, db.ReplaceAccountAffinityParams{UserID: userID, GroupID: groupID, SessionHash: digest[:], Provider: scope, AccountID: id, Model: bindingModel, ExpiresAt: expires})
 		} else {
 			// Creating an auto binding from a legacy scope can also move the account.
-			err = rememberAffinity(ctx, q, userID, groupID, digest, scope, id, bindingModel, now, expires, replacement != nil)
+			err = rememberAffinity(ctx, q, userID, groupID, digest, scope, id, bindingModel, now, expires, replacement != nil && !derived, derived)
+		}
+		// Derived preferences must never reject traffic that would otherwise be scheduled.
+		if derived && errors.Is(err, ErrAffinityLimit) {
+			err = nil
 		}
 		if err != nil {
 			return "", digest, err
@@ -459,14 +544,14 @@ func (s *Service) selectAllocationAccount(ctx context.Context, userID, groupID i
 	if err := tx.Commit(); err != nil {
 		return "", digest, err
 	}
-	if replacement != nil {
+	if replacement != nil && replacement.AccountID != id {
 		logging.From(ctx).LogAttrs(ctx, slog.LevelInfo, "Gateway conversation reassigned",
 			slog.String("request_id", RequestID(ctx)), slog.Int64("tenant_id", s.tenantID),
 			slog.Int64("user_id", userID), slog.Int64("group_id", groupID),
 			slog.String("previous_account_id", replacement.AccountID), slog.String("account_id", id),
 			slog.String("reason", replacementReason), slog.String("strategy", route.Strategy))
 	}
-	if id != parentAccount {
+	if id != parentAccount && id != stickyAccount {
 		s.recordSchedulingPlacement(groupID, cursor, schedulingPolicy.Revision, id, details)
 	}
 	return id, digest, nil
@@ -489,7 +574,13 @@ func preferredProvider(kind Kind) string {
 	}
 }
 
-func rememberAffinity(ctx context.Context, q *db.Queries, userID, groupID int64, digest [32]byte, scope, id, model string, now, expires int64, rebound bool) error {
+const (
+	affinityLimit = 4096
+	// Derived preferences may hold at most a quarter of the shared table.
+	derivedAffinityLimit = affinityLimit / 4
+)
+
+func rememberAffinity(ctx context.Context, q *db.Queries, userID, groupID int64, digest [32]byte, scope, id, model string, now, expires int64, rebound, derived bool) error {
 	if err := q.PruneAccountAffinity(ctx, now); err != nil {
 		return err
 	}
@@ -497,8 +588,23 @@ func rememberAffinity(ctx context.Context, q *db.Queries, userID, groupID int64,
 	if err != nil {
 		return err
 	}
-	if count >= 4096 {
-		return ErrAffinityLimit
+	if derived {
+		preferences, err := q.CountDerivedAffinity(ctx)
+		if err != nil {
+			return err
+		}
+		if count >= affinityLimit || preferences >= derivedAffinityLimit {
+			return ErrAffinityLimit
+		}
+	} else if count >= affinityLimit {
+		// An explicit conversation never fails because preferences filled the table.
+		evicted, err := q.EvictDerivedAffinity(ctx)
+		if err != nil {
+			return err
+		}
+		if evicted == 0 {
+			return ErrAffinityLimit
+		}
 	}
-	return q.CreateAccountAffinity(ctx, db.CreateAccountAffinityParams{GroupID: groupID, Provider: scope, UserID: userID, SessionHash: digest[:], AccountID: id, Model: model, ExpiresAt: expires, Rebound: rebound})
+	return q.CreateAccountAffinity(ctx, db.CreateAccountAffinityParams{GroupID: groupID, Provider: scope, UserID: userID, SessionHash: digest[:], AccountID: id, Model: model, ExpiresAt: expires, Rebound: rebound, Derived: derived})
 }

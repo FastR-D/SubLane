@@ -10,13 +10,13 @@ import (
 	"github.com/murongg/SubLane/internal/audit"
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/content"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/vault"
 )
 
 func TestContentAdministrationRedactionOriginAndAudit(t *testing.T) {
 	ctx := context.Background()
-	conn, err := storage.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	conn, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

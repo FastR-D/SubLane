@@ -10,7 +10,7 @@ import (
 
 	"github.com/murongg/SubLane/internal/alerts"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/vault"
 )
 
@@ -20,7 +20,7 @@ func (f alertTestSender) Do(r *http.Request) (*http.Response, error) { return f(
 
 func TestWorkspaceAlertsRequireAdministratorAndNeverDiscloseURL(t *testing.T) {
 	ctx := context.Background()
-	conn, err := storage.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	conn, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

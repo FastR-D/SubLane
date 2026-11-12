@@ -22,7 +22,7 @@ import (
 	"github.com/murongg/SubLane/internal/audit"
 	"github.com/murongg/SubLane/internal/gateway"
 	"github.com/murongg/SubLane/internal/logging"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 type logBuffer struct {
@@ -472,7 +472,7 @@ func TestWebsocketLogsConnectionLimitRejections(t *testing.T) {
 }
 
 func TestAuditFailureLogKeepsSafeRequestContext(t *testing.T) {
-	connection, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "synthetic-audit.db"))
+	connection, err := testdb.Open(context.Background(), filepath.Join(t.TempDir(), "synthetic-audit.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

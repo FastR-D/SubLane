@@ -63,11 +63,18 @@ export function AllocationSettlement({
                 String(form.get('cached') ?? ''),
                 'tokens',
               ) ?? -1
+            // An empty image share means the request had no image input.
+            const imageText = String(form.get('image_input') ?? '').trim()
+            const imageInput =
+              imageText === ''
+                ? 0
+                : (parseAllocationValue(imageText, 'tokens') ?? -1)
             const bad =
               input < entry.input ||
               output < entry.output ||
               cached < 0 ||
-              cached > input
+              imageInput < 0 ||
+              cached + imageInput > input
             setInvalid(bad)
             if (!bad)
               mutation.mutate({
@@ -75,12 +82,13 @@ export function AllocationSettlement({
                 input,
                 output,
                 cached,
+                image_input: imageInput,
               })
           }}
         >
           <fieldset
             disabled={mutation.isPending}
-            className="grid gap-3 sm:grid-cols-3"
+            className="grid gap-3 sm:grid-cols-2"
           >
             {(['input', 'output', 'cached'] as const).map((key) => (
               <div key={key} className="space-y-2">
@@ -104,6 +112,27 @@ export function AllocationSettlement({
                 />
               </div>
             ))}
+            <div className="space-y-2">
+              <label
+                htmlFor={`${entry.request_id}-image_input`}
+                className="text-sm"
+              >
+                {t('allocationImageInputM')}
+              </label>
+              <Input
+                id={`${entry.request_id}-image_input`}
+                name="image_input"
+                inputMode="decimal"
+                placeholder="0"
+                aria-describedby={`${entry.request_id}-image_input-hint`}
+              />
+              <p
+                id={`${entry.request_id}-image_input-hint`}
+                className="text-xs leading-5 text-muted-foreground"
+              >
+                {t('allocationImageInputHint')}
+              </p>
+            </div>
           </fieldset>
           {(invalid || mutation.isError) && (
             <p role="alert" className="text-sm text-error">

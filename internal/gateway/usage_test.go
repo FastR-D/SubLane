@@ -16,6 +16,7 @@ import (
 	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/upstream"
 	"github.com/murongg/SubLane/internal/vault"
 )
@@ -61,7 +62,11 @@ func newProviderQuotaFixture(t *testing.T, provider string) *quotaFixture {
 func (f *quotaFixture) open(t *testing.T) {
 	t.Helper()
 	var err error
-	f.connection, err = storage.Open(context.Background(), f.path)
+	open := storage.Open
+	if f.connection == nil {
+		open = testdb.Open
+	}
+	f.connection, err = open(context.Background(), f.path)
 	if err != nil {
 		t.Fatal(err)
 	}

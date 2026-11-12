@@ -16,11 +16,11 @@ import (
 	"github.com/murongg/SubLane/internal/apikey"
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/groups"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func TestGroupHTTPManagementAndPersonalChoices(t *testing.T) {
-	connection, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "groups.db"))
+	connection, err := testdb.Open(context.Background(), filepath.Join(t.TempDir(), "groups.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

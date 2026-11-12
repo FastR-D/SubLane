@@ -10,8 +10,13 @@ const groupSchema = z.object({
     .object({
       preference: z.enum(['protocol', 'subscription_first', 'api_first']),
       allow_api_fallback: z.boolean(),
+      session_sticky: z.boolean().optional().default(false),
     })
-    .default({ preference: 'protocol', allow_api_fallback: true }),
+    .default({
+      preference: 'protocol',
+      allow_api_fallback: true,
+      session_sticky: false,
+    }),
   id: z.number().int().positive(),
   name: z.string().min(1),
   enabled: z.boolean(),
@@ -75,6 +80,7 @@ export function saveGroup({
   routing: {
     preference: 'protocol' | 'subscription_first' | 'api_first'
     allow_api_fallback: boolean
+    session_sticky: boolean
   }
   preference_boosts?: Record<string, number>
   model_policy: { restricted: boolean; models: string[] }
@@ -82,6 +88,12 @@ export function saveGroup({
   return request(id ? `/api/groups/${id}` : '/api/groups', detailSchema, {
     method: id ? 'PATCH' : 'POST',
     body: JSON.stringify(input),
+  })
+}
+export function deleteGroup(id: number) {
+  return request(`/api/groups/${id}`, z.undefined(), {
+    method: 'DELETE',
+    body: '{}',
   })
 }
 export function memberGroupOptions(id: number) {
@@ -229,4 +241,14 @@ export function schedulingOptions(id: number, model: string) {
         { signal },
       ),
   })
+}
+
+export function groupDeleteErrorKey(error: Error) {
+  if (error instanceof ApiError) {
+    if (error.code === 'demo_read_only') return 'demoReadOnly'
+    if (error.code === 'group_in_use') return 'groupDeleteInUse'
+    if (error.code === 'allocation_pool_locked') return 'groupDeleteAllocated'
+    if (error.code === 'group_not_found') return 'groupDeleteMissing'
+  }
+  return 'groupDeleteFailed'
 }

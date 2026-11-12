@@ -45,8 +45,8 @@ export function ChannelEditor({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{t('replaceAPIKey')}</DialogTitle>
-          <DialogDescription>{t('apiUpstreamDescription')}</DialogDescription>
+          <DialogTitle>{t('editChannel')}</DialogTitle>
+          <DialogDescription>{t('channelEditDescription')}</DialogDescription>
         </DialogHeader>
         <ChannelForm
           channel={channel}

@@ -18,14 +18,14 @@ import (
 
 	"github.com/murongg/SubLane/internal/audit"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/vault"
 )
 
 func TestBackupManagementExportsVerifiesAndPreparesIsolatedRestore(t *testing.T) {
 	ctx := context.Background()
 	directory := t.TempDir()
-	connection, err := storage.Open(ctx, filepath.Join(directory, "sublane.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(directory, "sublane.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

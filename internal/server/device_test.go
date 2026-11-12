@@ -12,7 +12,7 @@ import (
 	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/oauth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/upstream"
 	"github.com/murongg/SubLane/internal/vault"
 )
@@ -20,7 +20,7 @@ import (
 func TestGrokDeviceRoutesProtectSecretsAndSession(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := storage.Open(ctx, filepath.Join(dir, "synthetic.db"))
+	db, err := testdb.Open(ctx, filepath.Join(dir, "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

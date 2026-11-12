@@ -10,14 +10,14 @@ import (
 
 	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/vault"
 )
 
 func TestAccountSummaryExcludesPausedProviders(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	connection, err := storage.Open(ctx, filepath.Join(dir, "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(dir, "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestAccountSummaryExcludesPausedProviders(t *testing.T) {
 func TestAccountManagementIsAdministratorOnlyAndNeverReturnsTokens(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := storage.Open(ctx, filepath.Join(dir, "accounts.db"))
+	db, err := testdb.Open(ctx, filepath.Join(dir, "accounts.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

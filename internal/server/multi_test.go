@@ -13,14 +13,14 @@ import (
 	"github.com/murongg/SubLane/internal/apikey"
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/groups"
-	"github.com/murongg/SubLane/internal/storage"
 	"github.com/murongg/SubLane/internal/tenants"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/vault"
 )
 
 func TestInvitationRegistrationSelectsItsWorkspace(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestInvitationRegistrationSelectsItsWorkspace(t *testing.T) {
 
 func TestWorkspaceDispatchUsesKeyForGatewayAndSelectionForManagement(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestWorkspaceDispatchUsesKeyForGatewayAndSelectionForManagement(t *testing.
 
 func TestFreshInstallationStillServesSetupAssets(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "fresh.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "fresh.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

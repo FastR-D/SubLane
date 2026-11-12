@@ -11,13 +11,13 @@ import (
 
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/gateway"
-	"github.com/murongg/SubLane/internal/storage"
 	"github.com/murongg/SubLane/internal/storage/db"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func TestPersonalRequestsEnforceOwnershipBeforePagination(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "history.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "history.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

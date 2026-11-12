@@ -72,7 +72,7 @@ var actions = map[string]string{
 	"settings.test":   "settings",
 	"updates.request": "settings",
 	"key.reveal":      "key", "key.create": "key", "key.update": "key", "key.revoke": "key",
-	"group.create": "group", "group.update": "group",
+	"group.create": "group", "group.update": "group", "group.delete": "group",
 	"member.budget": "member", "member.budget_settle": "member", "member.create": "member", "member.update": "member", "member.groups": "member", "member.limits": "member", "member.password": "member",
 	"member.remove":     "member",
 	"invitation.create": "invitation",

@@ -64,6 +64,24 @@ func (q *Queries) ClearGroupAccounts(ctx context.Context, groupID int64) error {
 	return err
 }
 
+const clearGroupAffinity = `-- name: ClearGroupAffinity :exec
+DELETE FROM account_affinity WHERE group_id=?1
+`
+
+func (q *Queries) ClearGroupAffinity(ctx context.Context, groupID int64) error {
+	_, err := q.db.ExecContext(ctx, clearGroupAffinity, groupID)
+	return err
+}
+
+const clearGroupMembers = `-- name: ClearGroupMembers :exec
+DELETE FROM group_members WHERE group_id=?1
+`
+
+func (q *Queries) ClearGroupMembers(ctx context.Context, groupID int64) error {
+	_, err := q.db.ExecContext(ctx, clearGroupMembers, groupID)
+	return err
+}
+
 const clearGroupModels = `-- name: ClearGroupModels :exec
 DELETE FROM group_models WHERE group_id=?1
 `
@@ -101,7 +119,7 @@ func (q *Queries) CountGroupMembers(ctx context.Context, groupID int64) (int64, 
 }
 
 const countGroups = `-- name: CountGroups :one
-SELECT count(*) FROM account_groups WHERE tenant_id=?1
+SELECT count(*) FROM account_groups WHERE tenant_id=?1 AND deleted_at IS NULL
 `
 
 func (q *Queries) CountGroups(ctx context.Context, tenantID int64) (int64, error) {
@@ -137,7 +155,7 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (int64
 }
 
 const findGroupName = `-- name: FindGroupName :one
-SELECT id FROM account_groups WHERE tenant_id=?1 AND name=?2 COLLATE NOCASE
+SELECT id FROM account_groups WHERE tenant_id=?1 AND name=?2 COLLATE NOCASE AND deleted_at IS NULL
 `
 
 type FindGroupNameParams struct {
@@ -153,7 +171,7 @@ func (q *Queries) FindGroupName(ctx context.Context, arg FindGroupNameParams) (i
 }
 
 const getGroup = `-- name: GetGroup :one
-SELECT id, name, enabled, created_at, updated_at, restricted_models, tenant_id, routing_preference, allow_api_fallback FROM account_groups WHERE id=?1
+SELECT id, name, enabled, created_at, updated_at, restricted_models, tenant_id, routing_preference, allow_api_fallback, session_sticky, deleted_at FROM account_groups WHERE id=?1
 `
 
 func (q *Queries) GetGroup(ctx context.Context, id int64) (AccountGroup, error) {
@@ -169,12 +187,14 @@ func (q *Queries) GetGroup(ctx context.Context, id int64) (AccountGroup, error) 
 		&i.TenantID,
 		&i.RoutingPreference,
 		&i.AllowApiFallback,
+		&i.SessionSticky,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getTenantGroup = `-- name: GetTenantGroup :one
-SELECT id, name, enabled, created_at, updated_at, restricted_models, tenant_id, routing_preference, allow_api_fallback FROM account_groups WHERE id=?1 AND tenant_id=?2
+SELECT id, name, enabled, created_at, updated_at, restricted_models, tenant_id, routing_preference, allow_api_fallback, session_sticky, deleted_at FROM account_groups WHERE id=?1 AND tenant_id=?2 AND deleted_at IS NULL
 `
 
 type GetTenantGroupParams struct {
@@ -195,6 +215,8 @@ func (q *Queries) GetTenantGroup(ctx context.Context, arg GetTenantGroupParams) 
 		&i.TenantID,
 		&i.RoutingPreference,
 		&i.AllowApiFallback,
+		&i.SessionSticky,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -229,6 +251,17 @@ func (q *Queries) GroupAccountExists(ctx context.Context, arg GroupAccountExists
 	return exists, err
 }
 
+const groupActiveKeyCount = `-- name: GroupActiveKeyCount :one
+SELECT count(*) FROM api_keys WHERE group_id=?1 AND revoked_at IS NULL
+`
+
+func (q *Queries) GroupActiveKeyCount(ctx context.Context, groupID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, groupActiveKeyCount, groupID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const groupConnectionStatus = `-- name: GroupConnectionStatus :one
 SELECT CASE WHEN EXISTS(
  SELECT 1 FROM routable_group_resources ga JOIN accounts a ON a.id=ga.account_id JOIN account_groups g ON g.id=ga.group_id JOIN users u ON u.id=?1
@@ -249,6 +282,17 @@ func (q *Queries) GroupConnectionStatus(ctx context.Context, arg GroupConnection
 	var status string
 	err := row.Scan(&status)
 	return status, err
+}
+
+const groupHasAllocation = `-- name: GroupHasAllocation :one
+SELECT EXISTS(SELECT 1 FROM allocation_schemes WHERE group_id=?1)
+`
+
+func (q *Queries) GroupHasAllocation(ctx context.Context, groupID int64) (bool, error) {
+	row := q.db.QueryRowContext(ctx, groupHasAllocation, groupID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const groupHasSubscriptions = `-- name: GroupHasSubscriptions :one
@@ -391,11 +435,11 @@ func (q *Queries) ListGroupPreferenceBoosts(ctx context.Context, groupID int64) 
 }
 
 const listGroups = `-- name: ListGroups :many
-SELECT g.id, g.name, g.enabled, g.created_at, g.updated_at, g.restricted_models, g.tenant_id, g.routing_preference, g.allow_api_fallback, (SELECT count(*) FROM group_accounts a WHERE a.group_id=g.id) AS account_count,
+SELECT g.id, g.name, g.enabled, g.created_at, g.updated_at, g.restricted_models, g.tenant_id, g.routing_preference, g.allow_api_fallback, g.session_sticky, g.deleted_at, (SELECT count(*) FROM group_accounts a WHERE a.group_id=g.id) AS account_count,
 (SELECT count(*) FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id WHERE ga.group_id=g.id AND a.provider!='openai') AS subscription_count,
 (SELECT count(*) FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id WHERE ga.group_id=g.id AND a.provider='openai') AS channel_count,
 (SELECT count(*) FROM effective_group_access access WHERE access.group_id=g.id) AS member_count
-FROM account_groups g WHERE g.tenant_id=?1 ORDER BY g.id
+FROM account_groups g WHERE g.tenant_id=?1 AND g.deleted_at IS NULL ORDER BY g.id
 `
 
 type ListGroupsRow struct {
@@ -408,6 +452,8 @@ type ListGroupsRow struct {
 	TenantID          int64
 	RoutingPreference string
 	AllowApiFallback  int64
+	SessionSticky     bool
+	DeletedAt         *int64
 	AccountCount      int64
 	SubscriptionCount int64
 	ChannelCount      int64
@@ -433,6 +479,8 @@ func (q *Queries) ListGroups(ctx context.Context, tenantID int64) ([]ListGroupsR
 			&i.TenantID,
 			&i.RoutingPreference,
 			&i.AllowApiFallback,
+			&i.SessionSticky,
+			&i.DeletedAt,
 			&i.AccountCount,
 			&i.SubscriptionCount,
 			&i.ChannelCount,
@@ -453,7 +501,7 @@ func (q *Queries) ListGroups(ctx context.Context, tenantID int64) ([]ListGroupsR
 
 const listMemberGroups = `-- name: ListMemberGroups :many
 SELECT m.group_id FROM group_members m JOIN account_groups g ON g.id=m.group_id
-WHERE m.user_id=?1 AND g.tenant_id=?2 ORDER BY m.group_id
+WHERE m.user_id=?1 AND g.tenant_id=?2 AND g.deleted_at IS NULL ORDER BY m.group_id
 `
 
 type ListMemberGroupsParams struct {
@@ -539,6 +587,26 @@ func (q *Queries) MemberExistsInTenant(ctx context.Context, arg MemberExistsInTe
 	return exists, err
 }
 
+const retireGroup = `-- name: RetireGroup :execrows
+UPDATE account_groups SET enabled=0,deleted_at=?1,updated_at=?1
+WHERE id=?2 AND tenant_id=?3 AND deleted_at IS NULL
+`
+
+type RetireGroupParams struct {
+	Now      *int64
+	ID       int64
+	TenantID int64
+}
+
+// Retired groups keep their names; uniqueness only applies to active groups.
+func (q *Queries) RetireGroup(ctx context.Context, arg RetireGroupParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, retireGroup, arg.Now, arg.ID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setGroupModelPolicy = `-- name: SetGroupModelPolicy :exec
 UPDATE account_groups SET restricted_models=?1 WHERE id=?2
 `
@@ -570,18 +638,24 @@ func (q *Queries) SetGroupPreferenceBoost(ctx context.Context, arg SetGroupPrefe
 }
 
 const setGroupRouting = `-- name: SetGroupRouting :exec
-UPDATE account_groups SET routing_preference=?1,allow_api_fallback=?2
-WHERE id=?3
+UPDATE account_groups SET routing_preference=?1,allow_api_fallback=?2,session_sticky=?3
+WHERE id=?4
 `
 
 type SetGroupRoutingParams struct {
 	Preference       string
 	AllowApiFallback int64
+	SessionSticky    bool
 	ID               int64
 }
 
 func (q *Queries) SetGroupRouting(ctx context.Context, arg SetGroupRoutingParams) error {
-	_, err := q.db.ExecContext(ctx, setGroupRouting, arg.Preference, arg.AllowApiFallback, arg.ID)
+	_, err := q.db.ExecContext(ctx, setGroupRouting,
+		arg.Preference,
+		arg.AllowApiFallback,
+		arg.SessionSticky,
+		arg.ID,
+	)
 	return err
 }
 

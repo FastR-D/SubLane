@@ -9,13 +9,13 @@ import (
 
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/pricing"
-	"github.com/murongg/SubLane/internal/storage"
 	"github.com/murongg/SubLane/internal/tenants"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func pricingFixture(t *testing.T, catalog *pricing.Service) (http.Handler, *http.Cookie, *http.Cookie) {
 	t.Helper()
-	connection, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "synthetic.db"))
+	connection, err := testdb.Open(context.Background(), filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

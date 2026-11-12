@@ -62,6 +62,7 @@ it('selects subscriptions and channels separately with API fallback off by defau
         expect(input.routing).toEqual({
           preference: 'subscription_first',
           allow_api_fallback: false,
+          session_sticky: false,
         })
         return Promise.resolve(
           response({
@@ -128,6 +129,7 @@ it('creates a pool with only selected accounts', async () => {
           routing: {
             preference: 'subscription_first',
             allow_api_fallback: false,
+            session_sticky: false,
           },
           model_policy: { restricted: false, models: [] },
         })
@@ -303,6 +305,11 @@ it('preserves group-local preference boosts, validates them and supports reset',
             account_ids: [account.id],
             allowed_models: [],
             preference_boosts: { [account.id]: 125 },
+            routing: {
+              preference: 'protocol',
+              allow_api_fallback: true,
+              session_sticky: true,
+            },
           }),
         )
       return Promise.resolve(response({ groups: [base] }))
@@ -337,6 +344,11 @@ it('preserves group-local preference boosts, validates them and supports reset',
   await user.click(within(dialog).getByRole('button', { name: 'Save group' }))
   await waitFor(() => expect(saved).toHaveLength(1))
   expect(saved[0].preference_boosts).toEqual({ [account.id]: 50 })
+  expect(saved[0].routing).toEqual({
+    preference: 'protocol',
+    allow_api_fallback: true,
+    session_sticky: true,
+  })
 })
 
 it('previews model-specific scheduling and handles failure and empty results', async () => {

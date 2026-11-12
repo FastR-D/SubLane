@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"modernc.org/sqlite"
@@ -176,38 +177,53 @@ func ValidateSnapshot(ctx context.Context, connection *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	version := 0
-	cursor := 0
+	history := make([]string, 0, len(entries))
 	formerProxyHistory := false
-	// The retired proxy migration counts in archive metadata but not in the current migration prefix.
+	// Accept only a prefix of a published history, including the two branches before their merge.
+	current := make([]string, 0, len(entries))
+	common := []string{}
+	for _, entry := range entries {
+		current = append(current, entry.Name())
+		if entry.Name() < "030_" {
+			common = append(common, entry.Name())
+		}
+	}
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		if cursor < len(entries) && entries[cursor].Name() == name {
-			cursor++
-			version++
-			continue
-		}
-		if cursor >= 3 && !formerProxyHistory && name == formerProxyChecksMigration {
+		// The retired proxy migration still counts in archive metadata.
+		if len(history) >= 3 && !formerProxyHistory && name == formerProxyChecksMigration {
 			formerProxyHistory = true
-			version++
 			continue
 		}
-		rows.Close()
-		return 0, errors.New("backup has an unknown or incomplete migration history")
+		if len(history) >= len(entries) {
+			rows.Close()
+			return 0, errors.New("backup has an unknown or incomplete migration history")
+		}
+		history = append(history, name)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return 0, err
 	}
-	if version == 0 {
+	if len(history) == 0 {
 		return 0, errors.New("backup has no SubLane schema")
 	}
+	valid := func(expected []string) bool {
+		return len(history) <= len(expected) && slices.Equal(history, expected[:len(history)])
+	}
+	mainHistory := append(slices.Clone(common), "030_group_lifecycle.sql", "031_image_requests.sql", "032_affinity_preferences.sql", "033_group_active_names.sql", "034_allocation_image_input.sql")
+	deployHistory := append(slices.Clone(common), "030_group_preference_boosts.sql", "031_scheduling_policy.sql", "032_scheduling_history.sql", "033_scheduling_cycles.sql")
+	if !valid(current) && !valid(mainHistory) && !valid(deployHistory) {
+		return 0, errors.New("backup has an unknown or incomplete migration history")
+	}
+	version := len(history)
 	if formerProxyHistory {
+		version++
 		if err := verifyProxyCheckColumns(ctx, connection); err != nil {
 			return 0, errors.New("backup has an incomplete proxy check schema")
 		}

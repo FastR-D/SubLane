@@ -33,7 +33,7 @@ func allocationError(w http.ResponseWriter, err error) {
 		status, code = 404, err.Error()
 	case errors.Is(err, allocations.ErrUnavailable):
 		status, code = 403, err.Error()
-	case errors.Is(err, allocations.ErrPoolConflict), errors.Is(err, allocations.ErrSettlement), errors.Is(err, allocations.ErrPending), errors.Is(err, allocations.ErrUnpriced):
+	case errors.Is(err, allocations.ErrPoolConflict), errors.Is(err, allocations.ErrInFlight), errors.Is(err, allocations.ErrSettlement), errors.Is(err, allocations.ErrPending), errors.Is(err, allocations.ErrUnpriced):
 		status, code = 409, err.Error()
 	case errors.Is(err, allocations.ErrVersionRequired), errors.Is(err, allocations.ErrVersionConflict), errors.Is(err, allocations.ErrEffectiveRequired), errors.Is(err, allocations.ErrEffectiveConflict), errors.Is(err, allocations.ErrStateConflict), errors.Is(err, allocations.ErrMemberConflict), errors.Is(err, allocations.ErrFunding), errors.Is(err, allocations.ErrReplacement), errors.Is(err, allocations.ErrInitialSchedule):
 		status, code = 409, err.Error()
@@ -55,6 +55,7 @@ func (h *allocationHTTP) register(r chi.Router) {
 	})
 	r.Post("/{id}/settle", h.settle)
 	r.Post("/{id}/enabled", h.enabled)
+	r.Delete("/{id}", h.remove)
 	r.Post("/{id}/members", h.members)
 	r.Post("/{id}/preview", h.preview)
 	r.Post("/{id}/cancel", func(w http.ResponseWriter, r *http.Request) { h.schedule(w, r, "cancel") })
@@ -215,16 +216,41 @@ func (h *allocationHTTP) settle(w http.ResponseWriter, r *http.Request) {
 		Input     *int64 `json:"input"`
 		Output    *int64 `json:"output"`
 		Cached    *int64 `json:"cached"`
+		// ImageInput is the optional image share of Input for image model requests.
+		ImageInput *int64 `json:"image_input"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if in.Input == nil || in.Output == nil || in.Cached == nil {
+	if in.Input == nil || in.Output == nil || in.Cached == nil || in.ImageInput != nil && *in.ImageInput < 0 {
 		allocationError(w, allocations.ErrInput)
 		return
 	}
-	err = h.gateway.Allocations().Settle(r.Context(), id, in.RequestID, allocations.Completion{Input: *in.Input, Output: *in.Output, Cached: *in.Cached})
+	var imageInput int64
+	if in.ImageInput != nil {
+		imageInput = *in.ImageInput
+	}
+	err = h.gateway.Allocations().Settle(r.Context(), id, in.RequestID, allocations.Completion{Input: *in.Input, ImageInput: imageInput, Output: *in.Output, Cached: *in.Cached})
 	if err != nil {
+		allocationError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+func (h *allocationHTTP) remove(w http.ResponseWriter, r *http.Request) {
+	if !h.available(w, r) {
+		return
+	}
+	id, err := pathID(r)
+	if err != nil || id <= 0 {
+		allocationError(w, allocations.ErrNotFound)
+		return
+	}
+	var in struct{}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if err = h.gateway.Allocations().Delete(r.Context(), id); err != nil {
 		allocationError(w, err)
 		return
 	}

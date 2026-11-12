@@ -22,7 +22,7 @@ import (
 	"github.com/murongg/SubLane/internal/content"
 	"github.com/murongg/SubLane/internal/gateway"
 	"github.com/murongg/SubLane/internal/groups"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/upstream"
 	"github.com/murongg/SubLane/internal/vault"
 )
@@ -62,7 +62,7 @@ func newConfiguredForwardFixture(t *testing.T, provider string, handler http.Han
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := storage.Open(ctx, filepath.Join(dir, "gateway.db"))
+	db, err := testdb.Open(ctx, filepath.Join(dir, "gateway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -105,3 +105,17 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	return s.resources.Delete(ctx, id)
 }
+
+// Update renames a channel and optionally replaces its key while keeping the channel ID.
+func (s *Service) Update(ctx context.Context, id string, input Input) (Channel, error) {
+	// UpdateAPIChannel rejects missing and non-channel resources itself.
+	row, err := s.resources.UpdateAPIChannel(ctx, id, accounts.APIChannelUpdate{Name: input.Name, APIKey: input.APIKey, BaseURL: input.BaseURL, Platform: input.Platform, Protocol: input.Protocol})
+	if errors.Is(err, accounts.ErrNotFound) {
+		return Channel{}, ErrNotFound
+	}
+	if err != nil {
+		return Channel{}, err
+	}
+	// Group counts and limits are not part of the credential row; reread the full metadata.
+	return s.Get(ctx, row.ID)
+}

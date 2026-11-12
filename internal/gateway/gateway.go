@@ -39,9 +39,17 @@ const (
 	Messages
 	Gemini
 	GeminiStream
+	Images
+	ImageEdits
 )
 
 func (k Kind) IsGemini() bool { return k == Gemini || k == GeminiStream }
+
+// IsImage reports OpenAI Images requests, which only Codex subscriptions can serve.
+func (k Kind) IsImage() bool { return k == Images || k == ImageEdits }
+
+// codexOnly kinds are served by native Codex endpoints without protocol translation.
+func (k Kind) codexOnly() bool { return k == Compact || k.IsImage() }
 
 type Service struct {
 	scheduling        schedulingCollector
@@ -163,7 +171,11 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 	}
 	entry.record.Provider = provider
 	input["model"], _ = json.Marshal(model)
-	if kind == Compact && provider != "" && provider != "codex" {
+	if kind.codexOnly() && provider != "" && provider != "codex" {
+		return nil, upstream.ErrInput
+	}
+	// Image models only exist behind the Images endpoints, and those endpoints only accept them.
+	if kind.IsImage() != upstream.IsImageModel(model) {
 		return nil, upstream.ErrInput
 	}
 	session := headers.Get("Session_id")
@@ -175,6 +187,7 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 			return nil, upstream.ErrInput
 		}
 	}
+	fromMetadata := false
 	if kind == Messages && session == "" && len(input["metadata"]) > 0 {
 		var metadata struct {
 			UserID string `json:"user_id"`
@@ -183,6 +196,7 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 			return nil, upstream.ErrInput
 		}
 		session = metadata.UserID
+		fromMetadata = session != ""
 	}
 	if len(session) > 1024 {
 		return nil, upstream.ErrInput
@@ -192,7 +206,7 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 		return nil, err
 	}
 	discoveryProvider := provider
-	if kind == Compact {
+	if kind.codexOnly() {
 		discoveryProvider = "codex"
 	}
 	if err := s.warmCatalogs(ctx, userID, groupID, discoveryProvider, true); err != nil {
@@ -205,6 +219,8 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 	if continued, _ := ctx.Value(continuationKey{}).(bool); continued {
 		affinity = continuationAffinity
 	}
+	// Hints are inert unless the group enables stickiness; selection reads that policy in its transaction.
+	ctx = withStickyHints(ctx, requestStickyHints(headers, input, kind, session, fromMetadata))
 	var credential accounts.Credential
 	id, digest, err := s.leaseAccount(ctx, entry, session, provider, model, kind, affinity, reviewParentThread(input, headers, model, kind), func(id string) error {
 		var prepareErr error
@@ -235,7 +251,7 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 	}
 	// Isolate provider-side session and prompt-cache identifiers between SubLane members.
 	outgoing.Set("Session_id", fmt.Sprintf("%x-%x-%x-%x-%x", digest[:4], digest[4:6], digest[6:8], digest[8:10], digest[10:16]))
-	if kind == Messages || kind.IsGemini() {
+	if kind == Messages || kind.IsGemini() || kind.IsImage() {
 		delete(input, "prompt_cache_key")
 	} else {
 		input["prompt_cache_key"], _ = json.Marshal(hex.EncodeToString(digest[:]))
@@ -249,7 +265,7 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 	}
 	upstreamCtx := ctx
 	var releaseUpstream func()
-	if entry.record.Provider == "codex" && kind != Compact {
+	if entry.record.Provider == "codex" && !kind.codexOnly() {
 		upstreamCtx, releaseUpstream = drainingUpstreamContext(ctx, s.runContext, canceledStreamDrain)
 		defer func() {
 			if exchange == nil {
@@ -271,6 +287,9 @@ func (s *Service) Open(ctx context.Context, userID, groupID int64, raw []byte, h
 		}
 		if kind == Chat {
 			return s.provider.Chat(upstreamCtx, c, raw, outgoing)
+		}
+		if kind.IsImage() {
+			return s.provider.Images(upstreamCtx, c, raw, outgoing, kind == ImageEdits)
 		}
 		return s.provider.Responses(upstreamCtx, c, raw, outgoing, kind == Compact)
 	}

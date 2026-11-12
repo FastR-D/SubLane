@@ -10,7 +10,7 @@ import (
 
 	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/upstream"
 	"github.com/murongg/SubLane/internal/vault"
 )
@@ -18,7 +18,7 @@ import (
 func TestProxyManagementAndBindingAreAdministratorOnly(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	connection, err := storage.Open(ctx, filepath.Join(dir, "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(dir, "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestProxyManagementAndBindingAreAdministratorOnly(t *testing.T) {
 func TestProxyBulkImportAndLocationCheck(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	connection, err := storage.Open(ctx, filepath.Join(dir, "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(dir, "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

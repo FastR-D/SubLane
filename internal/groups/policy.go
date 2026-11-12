@@ -95,5 +95,5 @@ func ReadPolicy(ctx context.Context, q *db.Queries, userID, groupID int64) (Mode
 		return ModelPolicy{}, err
 	}
 	hasSubscriptions, err := q.GroupHasSubscriptions(ctx, groupID)
-	return ModelPolicy{Restricted: group.RestrictedModels, Models: models, Routing: Routing{Preference: group.RoutingPreference, AllowAPIFallback: group.AllowApiFallback != 0}, HasSubscriptions: hasSubscriptions}, err
+	return ModelPolicy{Restricted: group.RestrictedModels, Models: models, Routing: Routing{Preference: group.RoutingPreference, AllowAPIFallback: group.AllowApiFallback != 0, SessionSticky: group.SessionSticky}, HasSubscriptions: hasSubscriptions}, err
 }

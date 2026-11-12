@@ -15,14 +15,14 @@ import (
 	"time"
 
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
 	"github.com/murongg/SubLane/internal/tenants"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func authFixture(t *testing.T, publicURL string) http.Handler {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := storage.Open(context.Background(), filepath.Join(dir, "synthetic.db"))
+	db, err := testdb.Open(context.Background(), filepath.Join(dir, "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestInvitationRegistrationDoesNotConsumeLoginAttempts(t *testing.T) {
 
 func TestLoginAttemptsAreSharedAcrossWorkspaceHandlers(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

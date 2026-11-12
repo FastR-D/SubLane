@@ -25,6 +25,7 @@ var (
 	ErrDuplicate   = errors.New("group_exists")
 	ErrLimit       = errors.New("group_limit")
 	ErrUnavailable = errors.New("group_unavailable")
+	ErrInUse       = errors.New("group_in_use")
 )
 
 type Group struct {
@@ -90,7 +91,7 @@ func (s *Service) List(ctx context.Context) ([]Group, error) {
 	}
 	result := make([]Group, 0, len(rows))
 	for _, r := range rows {
-		result = append(result, Group{SubscriptionCount: r.SubscriptionCount, ChannelCount: r.ChannelCount, Routing: Routing{Preference: r.RoutingPreference, AllowAPIFallback: r.AllowApiFallback != 0}, RestrictedModels: r.RestrictedModels, ID: r.ID, Name: r.Name, Enabled: r.Enabled, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, AccountCount: r.AccountCount, MemberCount: r.MemberCount})
+		result = append(result, Group{SubscriptionCount: r.SubscriptionCount, ChannelCount: r.ChannelCount, Routing: Routing{Preference: r.RoutingPreference, AllowAPIFallback: r.AllowApiFallback != 0, SessionSticky: r.SessionSticky}, RestrictedModels: r.RestrictedModels, ID: r.ID, Name: r.Name, Enabled: r.Enabled, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, AccountCount: r.AccountCount, MemberCount: r.MemberCount})
 	}
 	return result, nil
 }
@@ -116,7 +117,7 @@ func (s *Service) Get(ctx context.Context, id int64) (Detail, error) {
 	if err != nil {
 		return Detail{}, err
 	}
-	result := Detail{Group: Group{Routing: Routing{Preference: row.RoutingPreference, AllowAPIFallback: row.AllowApiFallback != 0}, RestrictedModels: row.RestrictedModels, ID: row.ID, Name: row.Name, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, AccountCount: int64(len(ids)), MemberCount: count}, AccountIDs: ids, Resources: []Resource{}}
+	result := Detail{Group: Group{Routing: Routing{Preference: row.RoutingPreference, AllowAPIFallback: row.AllowApiFallback != 0, SessionSticky: row.SessionSticky}, RestrictedModels: row.RestrictedModels, ID: row.ID, Name: row.Name, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, AccountCount: int64(len(ids)), MemberCount: count}, AccountIDs: ids, Resources: []Resource{}}
 	for _, sourceID := range ids {
 		source, err := q.GetAccount(ctx, db.GetAccountParams{ID: sourceID, TenantID: s.tenantID})
 		if err != nil {
@@ -295,7 +296,7 @@ func (s *Service) Save(ctx context.Context, id int64, input Input) (Detail, erro
 		if input.Routing.AllowAPIFallback {
 			fallback = 1
 		}
-		if err := q.SetGroupRouting(ctx, db.SetGroupRoutingParams{ID: id, Preference: input.Routing.Preference, AllowApiFallback: fallback}); err != nil {
+		if err := q.SetGroupRouting(ctx, db.SetGroupRoutingParams{ID: id, Preference: input.Routing.Preference, AllowApiFallback: fallback, SessionSticky: input.Routing.SessionSticky}); err != nil {
 			return Detail{}, err
 		}
 	}
@@ -306,6 +307,56 @@ func (s *Service) Save(ctx context.Context, id int64, input Input) (Detail, erro
 		return Detail{}, err
 	}
 	return s.Get(ctx, id)
+}
+
+// Delete retires a group: routing, grants and bindings are removed while history keeps its workspace scope.
+// Active keys and allowances must be moved or removed first so no member silently loses access.
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	if id <= 0 {
+		return ErrNotFound
+	}
+	tx, err := s.connection.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := s.queries.WithTx(tx)
+	if _, err := q.GetTenantGroup(ctx, db.GetTenantGroupParams{ID: id, TenantID: s.tenantID}); errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
+	allocated, err := q.GroupHasAllocation(ctx, id)
+	if err != nil {
+		return err
+	}
+	if allocated {
+		return ErrAllocated
+	}
+	keys, err := q.GroupActiveKeyCount(ctx, id)
+	if err != nil {
+		return err
+	}
+	if keys > 0 {
+		return ErrInUse
+	}
+	for _, clear := range []func(context.Context, int64) error{q.ClearGroupMembers, q.ClearGroupAccounts, q.ClearGroupModels, q.ClearGroupAffinity} {
+		if err := clear(ctx, id); err != nil {
+			return err
+		}
+	}
+	now := time.Now().Unix()
+	changed, err := q.RetireGroup(ctx, db.RetireGroupParams{ID: id, TenantID: s.tenantID, Now: &now})
+	if err != nil {
+		return err
+	}
+	if changed != 1 {
+		return ErrNotFound
+	}
+	if err := audit.Record(ctx, q, "group.delete", "group", audit.ID(id)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 func (s *Service) Available(ctx context.Context, userID int64) ([]Choice, error) {
 	rows, err := s.queries.ListAvailableGroups(ctx, db.ListAvailableGroupsParams{UserID: userID, TenantID: s.tenantID})

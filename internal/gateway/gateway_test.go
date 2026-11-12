@@ -14,7 +14,7 @@ import (
 
 	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/upstream"
 	"github.com/murongg/SubLane/internal/vault"
 )
@@ -26,7 +26,7 @@ func (f transportFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 func TestGatewayKeepsAccountAffinityAndBoundsActiveRequests(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	connection, err := storage.Open(ctx, filepath.Join(dir, "gateway.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(dir, "gateway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

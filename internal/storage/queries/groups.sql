@@ -3,23 +3,23 @@ SELECT g.*, (SELECT count(*) FROM group_accounts a WHERE a.group_id=g.id) AS acc
 (SELECT count(*) FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id WHERE ga.group_id=g.id AND a.provider!='openai') AS subscription_count,
 (SELECT count(*) FROM group_accounts ga JOIN accounts a ON a.id=ga.account_id WHERE ga.group_id=g.id AND a.provider='openai') AS channel_count,
 (SELECT count(*) FROM effective_group_access access WHERE access.group_id=g.id) AS member_count
-FROM account_groups g WHERE g.tenant_id=sqlc.arg(tenant_id) ORDER BY g.id;
+FROM account_groups g WHERE g.tenant_id=sqlc.arg(tenant_id) AND g.deleted_at IS NULL ORDER BY g.id;
 
 -- name: GetGroup :one
 SELECT * FROM account_groups WHERE id=sqlc.arg(id);
 
 -- name: GetTenantGroup :one
-SELECT * FROM account_groups WHERE id=sqlc.arg(id) AND tenant_id=sqlc.arg(tenant_id);
+SELECT * FROM account_groups WHERE id=sqlc.arg(id) AND tenant_id=sqlc.arg(tenant_id) AND deleted_at IS NULL;
 
 -- name: CountGroups :one
-SELECT count(*) FROM account_groups WHERE tenant_id=sqlc.arg(tenant_id);
+SELECT count(*) FROM account_groups WHERE tenant_id=sqlc.arg(tenant_id) AND deleted_at IS NULL;
 
 -- name: CreateGroup :execlastid
 INSERT INTO account_groups(tenant_id,name,enabled,created_at,updated_at)
 VALUES(sqlc.arg(tenant_id),sqlc.arg(name),sqlc.arg(enabled),sqlc.arg(now),sqlc.arg(now));
 
 -- name: FindGroupName :one
-SELECT id FROM account_groups WHERE tenant_id=sqlc.arg(tenant_id) AND name=sqlc.arg(name) COLLATE NOCASE;
+SELECT id FROM account_groups WHERE tenant_id=sqlc.arg(tenant_id) AND name=sqlc.arg(name) COLLATE NOCASE AND deleted_at IS NULL;
 
 -- name: UpdateGroup :exec
 UPDATE account_groups SET name=sqlc.arg(name),enabled=sqlc.arg(enabled),updated_at=sqlc.arg(now)
@@ -39,7 +39,7 @@ SELECT EXISTS(SELECT 1 FROM accounts WHERE id=sqlc.arg(account_id) AND tenant_id
 
 -- name: ListMemberGroups :many
 SELECT m.group_id FROM group_members m JOIN account_groups g ON g.id=m.group_id
-WHERE m.user_id=sqlc.arg(user_id) AND g.tenant_id=sqlc.arg(tenant_id) ORDER BY m.group_id;
+WHERE m.user_id=sqlc.arg(user_id) AND g.tenant_id=sqlc.arg(tenant_id) AND g.deleted_at IS NULL ORDER BY m.group_id;
 
 -- name: ClearMemberGroups :exec
 DELETE FROM group_members WHERE user_id=sqlc.arg(user_id)
@@ -98,7 +98,7 @@ INSERT INTO group_models(group_id,model) VALUES(sqlc.arg(group_id),sqlc.arg(mode
 SELECT model FROM group_models WHERE group_id=sqlc.arg(group_id) ORDER BY model;
 
 -- name: SetGroupRouting :exec
-UPDATE account_groups SET routing_preference=sqlc.arg(preference),allow_api_fallback=sqlc.arg(allow_api_fallback)
+UPDATE account_groups SET routing_preference=sqlc.arg(preference),allow_api_fallback=sqlc.arg(allow_api_fallback),session_sticky=sqlc.arg(session_sticky)
 WHERE id=sqlc.arg(id);
 
 -- name: GroupHasSubscriptions :one
@@ -111,3 +111,20 @@ SELECT account_id,preference_boost FROM group_accounts WHERE group_id=sqlc.arg(g
 -- name: SetGroupPreferenceBoost :exec
 UPDATE group_accounts SET preference_boost=sqlc.arg(preference_boost)
 WHERE group_id=sqlc.arg(group_id) AND account_id=sqlc.arg(account_id);
+
+-- name: GroupActiveKeyCount :one
+SELECT count(*) FROM api_keys WHERE group_id=sqlc.arg(group_id) AND revoked_at IS NULL;
+
+-- name: GroupHasAllocation :one
+SELECT EXISTS(SELECT 1 FROM allocation_schemes WHERE group_id=sqlc.arg(group_id));
+
+-- name: ClearGroupMembers :exec
+DELETE FROM group_members WHERE group_id=sqlc.arg(group_id);
+
+-- name: ClearGroupAffinity :exec
+DELETE FROM account_affinity WHERE group_id=sqlc.arg(group_id);
+
+-- name: RetireGroup :execrows
+-- Retired groups keep their names; uniqueness only applies to active groups.
+UPDATE account_groups SET enabled=0,deleted_at=sqlc.arg(now),updated_at=sqlc.arg(now)
+WHERE id=sqlc.arg(id) AND tenant_id=sqlc.arg(tenant_id) AND deleted_at IS NULL;

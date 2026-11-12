@@ -8,7 +8,7 @@ import (
 
 	"github.com/murongg/SubLane/internal/audit"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/versions"
 )
 
@@ -16,7 +16,7 @@ func TestClientVersionSettingsRequireAdminAndAuditChanges(t *testing.T) {
 	for _, provider := range []versions.Provider{versions.Codex, versions.Grok, versions.Claude} {
 		t.Run(string(provider), func(t *testing.T) {
 			ctx := context.Background()
-			connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "versions.db"))
+			connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "versions.db"))
 			if err != nil {
 				t.Fatal(err)
 			}

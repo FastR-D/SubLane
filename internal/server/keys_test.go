@@ -16,11 +16,11 @@ import (
 
 	"github.com/murongg/SubLane/internal/apikey"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func TestPersonalKeyOwnershipAndGatewayBoundary(t *testing.T) {
-	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "key-api.db"))
+	db, err := testdb.Open(context.Background(), filepath.Join(t.TempDir(), "key-api.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func newTestKeyService(t *testing.T, connection *sql.DB) *apikey.Service {
 
 func TestKeyListFiltersRevokedBeforePagination(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "synthetic-keys.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "synthetic-keys.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestKeyListFiltersRevokedBeforePagination(t *testing.T) {
 }
 func TestPersonalKeyDisclosureBoundaryAndNoStore(t *testing.T) {
 	ctx := context.Background()
-	connection, err := storage.Open(ctx, filepath.Join(t.TempDir(), "disclosure.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(t.TempDir(), "disclosure.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

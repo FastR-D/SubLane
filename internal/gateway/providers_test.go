@@ -15,7 +15,7 @@ import (
 	"github.com/murongg/SubLane/internal/accounts"
 	"github.com/murongg/SubLane/internal/auth"
 	"github.com/murongg/SubLane/internal/groups"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 	"github.com/murongg/SubLane/internal/upstream"
 	"github.com/murongg/SubLane/internal/vault"
 )
@@ -74,7 +74,7 @@ func providerFixture(t *testing.T, transport http.RoundTripper, known bool, vers
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
-	connection, err := storage.Open(ctx, filepath.Join(dir, "test.db"))
+	connection, err := testdb.Open(ctx, filepath.Join(dir, "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

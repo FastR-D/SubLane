@@ -115,6 +115,7 @@ function GroupForm({
   const [fallback, setFallback] = useState(
     value?.routing.allow_api_fallback ?? false,
   )
+  const [sticky, setSticky] = useState(value?.routing.session_sticky ?? false)
   const [restricted, setRestricted] = useState(
     value?.restricted_models ?? false,
   )
@@ -155,7 +156,11 @@ function GroupForm({
         preference_boosts: Object.fromEntries(
           ids.map((id) => [id, Number(boosts[id] ?? 0)]),
         ),
-        routing: { preference, allow_api_fallback: fallback },
+        routing: {
+          preference,
+          allow_api_fallback: fallback,
+          session_sticky: sticky,
+        },
         model_policy: {
           restricted,
           models: models
@@ -468,6 +473,22 @@ function GroupForm({
                   ? 'apiPriorityHint'
                   : 'protocolRoutingHint',
             )}
+          </p>
+          <label className="flex items-start gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={sticky}
+              onChange={(event) => setSticky(event.target.checked)}
+              aria-describedby="group-session-sticky-hint"
+              className="mt-0.5 size-4 shrink-0 accent-primary focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <span>{t('sessionSticky')}</span>
+          </label>
+          <p
+            id="group-session-sticky-hint"
+            className="text-xs leading-5 text-muted-foreground"
+          >
+            {t('sessionStickyHint')}
           </p>
         </fieldset>
         <fieldset className="space-y-3" disabled={mutation.isPending}>

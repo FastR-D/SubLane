@@ -13,11 +13,11 @@ import (
 	"github.com/murongg/SubLane/internal/apikey"
 	"github.com/murongg/SubLane/internal/audit"
 	"github.com/murongg/SubLane/internal/auth"
-	"github.com/murongg/SubLane/internal/storage"
+	"github.com/murongg/SubLane/internal/testdb"
 )
 
 func TestAuditBoundaryRedactionAndKeyUpdates(t *testing.T) {
-	connection, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "audit.db"))
+	connection, err := testdb.Open(context.Background(), filepath.Join(t.TempDir(), "audit.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

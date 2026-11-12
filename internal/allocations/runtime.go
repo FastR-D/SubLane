@@ -195,9 +195,11 @@ func Begin(ctx context.Context, q *db.Queries, r Request, now int64, location *t
 
 type Completion struct {
 	Input, Output, Cached int64
-	Known                 bool
-	Dispatched            bool
-	Rejected              bool
+	// ImageInput is the image share of Input, reported by image generation responses.
+	ImageInput int64
+	Known      bool
+	Dispatched bool
+	Rejected   bool
 }
 
 func Finish(ctx context.Context, q *db.Queries, id string, c Completion, now int64, manual bool) error {
@@ -209,7 +211,8 @@ func Finish(ctx context.Context, q *db.Queries, id string, c Completion, now int
 		return nil
 	}
 	if manual {
-		if e.State == "settled" && e.Manual == 1 && e.InputTokens == c.Input && e.OutputTokens == c.Output && e.CachedTokens == c.Cached {
+		// Only an identical breakdown is a retry; a different image split would have charged differently.
+		if e.State == "settled" && e.Manual == 1 && e.InputTokens == c.Input && e.OutputTokens == c.Output && e.CachedTokens == c.Cached && e.ImageInputTokens == c.ImageInput {
 			return nil
 		}
 		if e.State != "pending" || c.Input < e.InputTokens || c.Output < e.OutputTokens {
@@ -237,7 +240,7 @@ func Finish(ctx context.Context, q *db.Queries, id string, c Completion, now int
 		if err != nil {
 			return err
 		}
-		cost, err = Cost(rate, c.Input, c.Output, c.Cached)
+		cost, err = CostWithImages(rate, c.Input, c.ImageInput, c.Output, c.Cached)
 		if err != nil {
 			return err
 		}
@@ -246,7 +249,7 @@ func Finish(ctx context.Context, q *db.Queries, id string, c Completion, now int
 		// Partial observations remain available for correction but are not a charge.
 		cost = 0
 	}
-	return q.FinishAllocationEntry(ctx, db.FinishAllocationEntryParams{RequestID: id, FinishedAt: now, State: state, InputTokens: c.Input, OutputTokens: c.Output, CachedTokens: c.Cached, Cost: cost, Manual: bit(manual)})
+	return q.FinishAllocationEntry(ctx, db.FinishAllocationEntryParams{RequestID: id, FinishedAt: now, State: state, InputTokens: c.Input, OutputTokens: c.Output, CachedTokens: c.Cached, ImageInputTokens: c.ImageInput, Cost: cost, Manual: bit(manual)})
 }
 func (s *Service) Settle(ctx context.Context, scheme int64, id string, c Completion) error {
 	tx, err := s.conn.BeginTx(ctx, nil)

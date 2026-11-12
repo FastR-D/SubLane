@@ -90,7 +90,10 @@ func requestReasoningEffort(input map[string]json.RawMessage, kind Kind) string 
 }
 
 type observation struct {
-	waitMS             int64
+	waitMS int64
+	// imageInputTokens is the image share of input tokens reported by Images responses; it only
+	// affects allowance settlement and is not stored in request history.
+	imageInputTokens   int64
 	route              *RouteExplanation
 	kind               Kind
 	service            *Service
@@ -147,6 +150,8 @@ func (s *Service) begin(ctx context.Context, userID, groupID int64, kind Kind) (
 		name = "chat"
 	} else if kind == Compact {
 		name = "compact"
+	} else if kind.IsImage() {
+		name = "images"
 	} else if kind == Messages {
 		name = "messages"
 	} else if kind.IsGemini() {
@@ -382,6 +387,7 @@ func (e *observation) observe(raw []byte) {
 		Output  *int64 `json:"output_tokens"`
 		Details struct {
 			Cached *int64 `json:"cached_tokens"`
+			Image  *int64 `json:"image_tokens"`
 		} `json:"input_tokens_details"`
 	}
 	var value struct {
@@ -409,4 +415,15 @@ func (e *observation) observe(raw []byte) {
 	e.record.InputTokens = valid(tokens.Input)
 	e.record.OutputTokens = valid(tokens.Output)
 	e.record.CachedTokens = valid(tokens.Details.Cached)
+	e.imageInputTokens = 0
+	// Settlement rejects overlapping categories, so an inconsistent split keeps the text input rate.
+	if image := valid(tokens.Details.Image); image != nil && e.record.InputTokens != nil {
+		cached := int64(0)
+		if e.record.CachedTokens != nil {
+			cached = *e.record.CachedTokens
+		}
+		if cached+*image <= *e.record.InputTokens {
+			e.imageInputTokens = *image
+		}
+	}
 }

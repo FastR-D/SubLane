@@ -24,10 +24,12 @@ const DefaultHashURL = "https://raw.githubusercontent.com/Wei-Shaw/model-price-r
 
 // Price uses micro-USD per million tokens, matching allocations.Rate.
 type Price struct {
-	Input  int64  `json:"input"`
-	Cached int64  `json:"cached"`
-	Output int64  `json:"output"`
-	Source string `json:"source"`
+	Input  int64 `json:"input"`
+	Cached int64 `json:"cached"`
+	Output int64 `json:"output"`
+	// ImageInput prices image input tokens for image generation models; zero means the text input rate.
+	ImageInput int64  `json:"image_input,omitempty"`
+	Source     string `json:"source"`
 }
 
 type ModelPrice struct {
@@ -299,6 +301,10 @@ type litePrice struct {
 	Input  *float64 `json:"input_cost_per_token"`
 	Cached *float64 `json:"cache_read_input_token_cost"`
 	Output *float64 `json:"output_cost_per_token"`
+	// Image generation models price image tokens separately from text tokens.
+	ImageInput  *float64 `json:"input_cost_per_image_token"`
+	ImageOutput *float64 `json:"output_cost_per_image_token"`
+	Mode        string   `json:"mode"`
 }
 
 func parsePrices(raw []byte, source string) (map[string]Price, error) {
@@ -308,6 +314,10 @@ func parsePrices(raw []byte, source string) (map[string]Price, error) {
 	}
 	result := make(map[string]Price, len(document))
 	for model, value := range document {
+		// Image models emit image tokens, so their output is always charged at the image rate.
+		if value.Mode == "image_generation" && value.ImageOutput != nil {
+			value.Output = value.ImageOutput
+		}
 		if source == "override" {
 			price := Price{Source: source}
 			if value.Input != nil && *value.Input > 0 {
@@ -337,7 +347,13 @@ func parsePrices(raw []byte, source string) (map[string]Price, error) {
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
-		result[strings.ToLower(normalizeModel(model))] = Price{Input: input, Cached: cache, Output: output, Source: source}
+		price := Price{Input: input, Cached: cache, Output: output, Source: source}
+		if value.Mode == "image_generation" && value.ImageInput != nil && *value.ImageInput > 0 && !math.IsNaN(*value.ImageInput) {
+			if imageInput, ok := toMicroPerMillion(*value.ImageInput); ok {
+				price.ImageInput = imageInput
+			}
+		}
+		result[strings.ToLower(normalizeModel(model))] = price
 	}
 	return result, nil
 }

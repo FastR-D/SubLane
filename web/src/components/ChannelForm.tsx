@@ -71,8 +71,9 @@ export function ChannelForm({
       setInvalid('name')
       return
     }
+    // Editing keeps the stored key unless a replacement is entered.
     if (
-      !key ||
+      (!key && !channel) ||
       new TextEncoder().encode(key).length > 16384 ||
       /[\s\p{Cc}]/u.test(key)
     ) {
@@ -99,7 +100,7 @@ export function ChannelForm({
     save.mutate({
       id: channel?.id,
       name: name.trim(),
-      api_key: key,
+      api_key: key || undefined,
       base_url: baseURL.trim(),
       platform,
       protocol,
@@ -179,7 +180,6 @@ export function ChannelForm({
           id="channel-name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          readOnly={Boolean(channel)}
           disabled={save.isPending}
           maxLength={128}
           aria-invalid={invalid === 'name'}
@@ -228,7 +228,7 @@ export function ChannelForm({
           id="channel-key-hint"
           className="text-xs leading-5 text-muted-foreground"
         >
-          {t('channelKeyHint')}
+          {t(channel ? 'channelKeyKeepHint' : 'channelKeyHint')}
         </p>
       </div>
       {!channel && (
@@ -275,7 +275,7 @@ export function ChannelForm({
               aria-hidden="true"
             />
           )}
-          {t(channel ? 'replaceAPIKey' : 'connectAPI')}
+          {t(channel ? 'saveChannel' : 'connectAPI')}
         </Button>
       </div>
     </form>

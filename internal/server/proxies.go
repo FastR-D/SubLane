@@ -21,6 +21,8 @@ func (h *proxyHTTP) register(router chi.Router) {
 	router.Post("/import", h.importBatch)
 	router.Post("/prune", h.pruneFailed)
 	router.Post("/{id}/check", h.checkOne)
+	router.Get("/{id}/ip-report", h.ipReport)
+	router.Post("/{id}/ip-report/refresh", h.refreshIPReport)
 	router.Put("/{id}", h.update)
 	router.Delete("/{id}", h.remove)
 }

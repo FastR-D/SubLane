@@ -29,7 +29,7 @@ func (e *observation) settleAllocation(ctx context.Context, q *db.Queries) error
 	}
 	known := e.record.InputTokens != nil && e.record.OutputTokens != nil && (e.usageFinal || e.record.Outcome == "success" || e.record.Outcome == "incomplete")
 	rejected := e.record.UpstreamStatus != nil && *e.record.UpstreamStatus >= 400
-	err := allocations.Finish(ctx, q, e.record.RequestID, allocations.Completion{Input: value(e.record.InputTokens), Output: value(e.record.OutputTokens), Cached: value(e.record.CachedTokens), Known: known, Dispatched: e.upstreamDispatched, Rejected: rejected}, e.service.now().UnixMilli(), false)
+	err := allocations.Finish(ctx, q, e.record.RequestID, allocations.Completion{Input: value(e.record.InputTokens), ImageInput: e.imageInputTokens, Output: value(e.record.OutputTokens), Cached: value(e.record.CachedTokens), Known: known, Dispatched: e.upstreamDispatched, Rejected: rejected}, e.service.now().UnixMilli(), false)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrAllocationAccounting
 	}

@@ -1,10 +1,16 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderClosed, LoaderCircle, Plus } from 'lucide-react'
+import { FolderClosed, LoaderCircle, Plus, Trash2 } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { groupOptions } from '@/lib/groups'
+import {
+  deleteGroup,
+  groupDeleteErrorKey,
+  groupOptions,
+  type Group,
+} from '@/lib/groups'
 import { CatalogDialog } from '@/components/CatalogDialog'
+import { ConfirmDelete } from '@/components/ConfirmDelete'
 import { GroupEditor } from '@/components/GroupEditor'
 import { GroupScheduling } from '@/components/GroupScheduling'
 import { Button } from '@/components/ui/Button'
@@ -15,6 +21,7 @@ export function Groups() {
   const client = useQueryClient()
   const query = useQuery(groupOptions)
   const [editing, setEditing] = useState<number | null>(null)
+  const [removing, setRemoving] = useState<Group | null>(null)
   const saved = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ['groups'] }),
@@ -135,6 +142,8 @@ export function Groups() {
                         ` · ${t(group.routing.allow_api_fallback ? 'apiFallbackEnabled' : 'apiFallbackDisabled')}`}
                     </>
                   )}
+                  {group.routing.session_sticky &&
+                    ` · ${t('sessionStickyEnabled')}`}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -158,6 +167,16 @@ export function Groups() {
                 >
                   {t('editGroup')}
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-error [@media(pointer:coarse)]:size-11"
+                  onClick={() => setRemoving(group)}
+                  title={t('deleteGroup')}
+                  aria-label={t('deleteGroupNamed', { name: group.name })}
+                >
+                  <Trash2 aria-hidden="true" className="size-4" />
+                </Button>
               </div>
             </section>
           ))}
@@ -168,6 +187,17 @@ export function Groups() {
           id={editing || undefined}
           onClose={() => setEditing(null)}
           onSaved={saved}
+        />
+      )}
+      {removing && (
+        <ConfirmDelete
+          title={t('deleteGroupTitle')}
+          description={t('deleteGroupDescription', { name: removing.name })}
+          action={t('deleteGroup')}
+          remove={() => deleteGroup(removing.id)}
+          errorText={(error) => t(groupDeleteErrorKey(error))}
+          onClose={() => setRemoving(null)}
+          onDeleted={saved}
         />
       )}
     </div>

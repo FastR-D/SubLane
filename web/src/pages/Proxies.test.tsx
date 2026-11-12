@@ -250,6 +250,36 @@ it('imports multiple proxies and displays a checked exit location', async () => 
         }
         return Promise.resolve(response(proxies[0]))
       }
+      // Reads only return cached reports; the explicit refresh is the one disclosure.
+      if (url === '/api/proxies/proxy-one/ip-report')
+        return Promise.resolve(response({ error: 'ip_report_not_loaded' }, 404))
+      if (
+        url === '/api/proxies/proxy-one/ip-report/refresh' &&
+        init?.method === 'POST'
+      )
+        return Promise.resolve(
+          response({
+            ip: '203.0.113.8',
+            trust_score: 86,
+            company_type: 'isp',
+            residential: true,
+            datacenter: false,
+            mobile: false,
+            vpn: false,
+            proxy: false,
+            tor: false,
+            abuser: false,
+            crawler: false,
+            asn: 64500,
+            as_organization: 'Synthetic ISP',
+            isp: 'Synthetic ISP',
+            country_code: 'US',
+            country: 'United States',
+            region: 'Test region',
+            city: 'Test city',
+            verdict: '',
+          }),
+        )
       if (url === '/api/proxies') return Promise.resolve(response({ proxies }))
       return Promise.reject(new Error('Unexpected request'))
     })
@@ -263,6 +293,10 @@ it('imports multiple proxies and displays a checked exit location', async () => 
   )
   const user = userEvent.setup()
   await screen.findByRole('heading', { name: 'Network proxies' })
+  // Unchecked proxies explain how to obtain a report instead of calling the reputation service.
+  expect(
+    fetch.mock.calls.some(([url]) => String(url).includes('ip-report')),
+  ).toBe(false)
   await user.click(screen.getByRole('button', { name: 'Import proxies' }))
   const dialog = await screen.findByRole('dialog')
   await user.type(
@@ -274,8 +308,29 @@ it('imports multiple proxies and displays a checked exit location', async () => 
   )
   await screen.findByText('Named exit')
   await user.click(screen.getByRole('button', { name: 'Test 127.0.0.1:18080' }))
-  await screen.findByText('Exit IP: 203.0.113.8')
-  await screen.findByText('Location: Test city, Test region, United States')
+  const report = await screen.findByRole('region', {
+    name: 'IP report for 127.0.0.1:18080',
+  })
+  const lookup = await within(report).findByRole('button', {
+    name: 'Check IP purity for 127.0.0.1:18080',
+  })
+  expect(
+    fetch.mock.calls.some(([url]) => String(url).endsWith('/refresh')),
+  ).toBe(false)
+  await user.click(lookup)
+  expect(await within(report).findByText('86')).toBeTruthy()
+  expect(within(report).getByText('Clean')).toBeTruthy()
+  expect(within(report).getByText('Residential')).toBeTruthy()
+  expect(within(report).getByText('No risk flags')).toBeTruthy()
+  // Each fact appears once per card even though the check and the report both describe it.
+  expect(screen.getByText('AS64500 · Synthetic ISP')).toBeTruthy()
+  expect(screen.getAllByText('203.0.113.8')).toHaveLength(1)
+  expect(
+    screen.getAllByText('Test city, Test region, United States'),
+  ).toHaveLength(1)
+  expect(
+    screen.getAllByText('Test the connection to see the exit IP report.'),
+  ).toHaveLength(1)
 })
 
 it('explains when the running backend lacks the bulk import route', async () => {
