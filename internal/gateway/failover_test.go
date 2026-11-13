@@ -159,7 +159,9 @@ func TestBusyPoolFailsImmediatelyWithoutLeakingAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer first.Body.Close()
-	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	// The first lease stays held until this call returns, so queued admission cannot succeed.
+	// Allow race-instrumented SQLite checks time to complete on a loaded test host.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	x, err := s.Open(ctx, 1, 1, raw, nil, Responses)
 	if x != nil {
