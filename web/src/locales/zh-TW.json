@@ -1677,5 +1677,11 @@
   "ipReportLookupHint": "查詢時會把該出口 IP 傳送給 ip.net.coffee。",
   "allocationImageInputM": "其中圖片輸入 · M",
   "allocationImageInputHint": "僅用於生圖模型請求：輸入 Token 中屬於圖片的部分，按圖片輸入價計費。其他請求留空即可。",
-  "allocationDeletePending": "此用量分配仍有待結算請求，請完成結算後再刪除。"
+  "allocationDeletePending": "此用量分配仍有待結算請求，請完成結算後再刪除。",
+  "accountTokenExpired": "權杖已過期",
+  "accountCredentialRefreshing": "正在重新整理憑證",
+  "accountCredentialRefreshFailed": "憑證重新整理失敗",
+  "accountCredentialLastFailure": "最近失敗時間：{{time}}",
+  "accountCredentialRetryAt": "最早重試時間：{{time}}",
+  "accountCredentialRetryPending": "等待下一次重新整理嘗試。"
 }

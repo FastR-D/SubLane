@@ -1677,5 +1677,11 @@
   "ipReportLookupHint": "確認すると、この出口 IP が ip.net.coffee に送信されます。",
   "allocationImageInputM": "うち画像入力 · M",
   "allocationImageInputHint": "画像モデルのリクエスト用：入力トークンのうち画像の分で、画像入力料金で課金されます。それ以外は空欄のままにしてください。",
-  "allocationDeletePending": "この割り当てには未精算のリクエストがあります。精算を完了してから削除してください。"
+  "allocationDeletePending": "この割り当てには未精算のリクエストがあります。精算を完了してから削除してください。",
+  "accountTokenExpired": "トークンの有効期限切れ",
+  "accountCredentialRefreshing": "認証情報を更新中",
+  "accountCredentialRefreshFailed": "認証情報の更新に失敗",
+  "accountCredentialLastFailure": "前回の失敗：{{time}}",
+  "accountCredentialRetryAt": "再試行可能時刻：{{time}}",
+  "accountCredentialRetryPending": "次の更新試行を待っています。"
 }

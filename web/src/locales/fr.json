@@ -1682,5 +1682,11 @@
   "ipReportLookupHint": "La vérification envoie cette IP de sortie à ip.net.coffee.",
   "allocationImageInputM": "Entrée image · M",
   "allocationImageInputHint": "Pour les requêtes de modèles d’image : la part image des jetons d’entrée, facturée au tarif d’entrée image. Sinon, laissez vide.",
-  "allocationDeletePending": "Des requêtes de cette allocation attendent leur règlement. Réglez-les avant de la supprimer."
+  "allocationDeletePending": "Des requêtes de cette allocation attendent leur règlement. Réglez-les avant de la supprimer.",
+  "accountTokenExpired": "Jeton expiré",
+  "accountCredentialRefreshing": "Actualisation des identifiants",
+  "accountCredentialRefreshFailed": "Échec de l’actualisation des identifiants",
+  "accountCredentialLastFailure": "Dernier échec : {{time}}",
+  "accountCredentialRetryAt": "Nouvel essai possible dès : {{time}}",
+  "accountCredentialRetryPending": "En attente de la prochaine tentative d’actualisation."
 }

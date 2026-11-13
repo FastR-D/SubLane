@@ -1682,5 +1682,11 @@
   "ipReportLookupHint": "A verificação envia este IP de saída para ip.net.coffee.",
   "allocationImageInputM": "Entrada de imagem · M",
   "allocationImageInputHint": "Para solicitações de modelos de imagem: a parte de imagem dos tokens de entrada, cobrada pela tarifa de entrada de imagem. Caso contrário, deixe vazio.",
-  "allocationDeletePending": "Esta alocação tem solicitações aguardando liquidação. Liquide-as antes de excluí-la."
+  "allocationDeletePending": "Esta alocação tem solicitações aguardando liquidação. Liquide-as antes de excluí-la.",
+  "accountTokenExpired": "Token expirado",
+  "accountCredentialRefreshing": "Atualizando credenciais",
+  "accountCredentialRefreshFailed": "Falha ao atualizar credenciais",
+  "accountCredentialLastFailure": "Última tentativa com falha: {{time}}",
+  "accountCredentialRetryAt": "Nova tentativa possível a partir de: {{time}}",
+  "accountCredentialRetryPending": "Aguardando a próxima tentativa de atualização."
 }

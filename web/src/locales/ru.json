@@ -1687,5 +1687,11 @@
   "ipReportLookupHint": "При проверке этот выходной IP отправляется на ip.net.coffee.",
   "allocationImageInputM": "Ввод изображений · M",
   "allocationImageInputHint": "Для запросов к моделям изображений: доля изображений во входных токенах по тарифу ввода изображений. Иначе оставьте пустым.",
-  "allocationDeletePending": "У этого лимита есть запросы, ожидающие расчёта. Завершите расчёт перед удалением."
+  "allocationDeletePending": "У этого лимита есть запросы, ожидающие расчёта. Завершите расчёт перед удалением.",
+  "accountTokenExpired": "Срок действия токена истёк",
+  "accountCredentialRefreshing": "Обновление учётных данных",
+  "accountCredentialRefreshFailed": "Не удалось обновить учётные данные",
+  "accountCredentialLastFailure": "Последняя неудачная попытка: {{time}}",
+  "accountCredentialRetryAt": "Повтор возможен с: {{time}}",
+  "accountCredentialRetryPending": "Ожидание следующей попытки обновления."
 }

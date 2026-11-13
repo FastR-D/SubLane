@@ -24,6 +24,7 @@ import {
 } from '@/lib/accounts'
 import { CatalogDialog } from '@/components/CatalogDialog'
 import { AccountUsage } from '@/components/AccountUsage'
+import { AccountCredentialStatus } from '@/components/AccountCredentialStatus'
 import { AccountResets } from '@/components/AccountResets'
 import { ConnectAccount } from '@/components/ConnectAccount'
 import { DeleteAccount } from '@/components/DeleteAccount'
@@ -220,10 +221,17 @@ export function Accounts() {
                           )?.name ?? t('proxyAssigned')}
                         </p>
                       )}
+                      <AccountCredentialStatus
+                        account={account}
+                        now={
+                          (account.credential_refresh?.server_time ??
+                            query.dataUpdatedAt / 1000) +
+                          Math.max(0, clock - query.dataUpdatedAt) / 1000
+                        }
+                      />
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <AccountStatus account={account} />
                     <Button
                       data-tour="verify"
                       variant="ghost"
@@ -506,32 +514,5 @@ export function Accounts() {
         />
       )}
     </div>
-  )
-}
-
-function AccountStatus({ account }: { account: Account }) {
-  const { t } = useTranslation()
-  return (
-    <Status
-      kind={
-        !account.enabled
-          ? 'neutral'
-          : account.status === 'ready'
-            ? 'success'
-            : account.status === 'reauth_required'
-              ? 'error'
-              : 'warning'
-      }
-    >
-      {t(
-        !account.enabled
-          ? 'disabled'
-          : account.status === 'ready'
-            ? 'accountVerified'
-            : account.status === 'reauth_required'
-              ? 'accountNeedsAuth'
-              : 'accountUnverified',
-      )}
-    </Status>
   )
 }

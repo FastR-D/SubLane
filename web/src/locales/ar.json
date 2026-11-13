@@ -1697,5 +1697,11 @@
   "ipReportLookupHint": "يؤدي الفحص إلى إرسال عنوان IP للخروج هذا إلى ip.net.coffee.",
   "allocationImageInputM": "إدخال الصور · M",
   "allocationImageInputHint": "لطلبات نماذج الصور: حصة الصور من رموز الإدخال وتُحتسب بسعر إدخال الصور. اتركه فارغًا في غير ذلك.",
-  "allocationDeletePending": "توجد طلبات بانتظار التسوية لهذا المخصص. أكمل تسويتها قبل حذفه."
+  "allocationDeletePending": "توجد طلبات بانتظار التسوية لهذا المخصص. أكمل تسويتها قبل حذفه.",
+  "accountTokenExpired": "انتهت صلاحية الرمز",
+  "accountCredentialRefreshing": "جارٍ تحديث بيانات الاعتماد",
+  "accountCredentialRefreshFailed": "تعذر تحديث بيانات الاعتماد",
+  "accountCredentialLastFailure": "آخر محاولة فاشلة: {{time}}",
+  "accountCredentialRetryAt": "أقرب وقت لإعادة المحاولة: {{time}}",
+  "accountCredentialRetryPending": "في انتظار المحاولة التالية لتحديث بيانات الاعتماد."
 }

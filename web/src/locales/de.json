@@ -1677,5 +1677,11 @@
   "ipReportLookupHint": "Beim Prüfen wird diese Ausgangs-IP an ip.net.coffee gesendet.",
   "allocationImageInputM": "Bildeingabe · M",
   "allocationImageInputHint": "Für Anfragen an Bildmodelle: der Bildanteil der Eingabetokens, abgerechnet zum Bildeingabepreis. Sonst leer lassen.",
-  "allocationDeletePending": "Für dieses Kontingent stehen noch Abrechnungen aus. Schließen Sie diese vor dem Löschen ab."
+  "allocationDeletePending": "Für dieses Kontingent stehen noch Abrechnungen aus. Schließen Sie diese vor dem Löschen ab.",
+  "accountTokenExpired": "Token abgelaufen",
+  "accountCredentialRefreshing": "Zugangsdaten werden aktualisiert",
+  "accountCredentialRefreshFailed": "Aktualisierung der Zugangsdaten fehlgeschlagen",
+  "accountCredentialLastFailure": "Letzter fehlgeschlagener Versuch: {{time}}",
+  "accountCredentialRetryAt": "Frühester erneuter Versuch: {{time}}",
+  "accountCredentialRetryPending": "Warten auf den nächsten Aktualisierungsversuch."
 }

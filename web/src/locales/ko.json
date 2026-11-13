@@ -1677,5 +1677,11 @@
   "ipReportLookupHint": "확인하면 이 출구 IP가 ip.net.coffee로 전송됩니다.",
   "allocationImageInputM": "이미지 입력 · M",
   "allocationImageInputHint": "이미지 모델 요청 전용: 입력 토큰 중 이미지 부분이며 이미지 입력 요금으로 청구됩니다. 그 외에는 비워 두세요.",
-  "allocationDeletePending": "이 할당량에 정산 대기 중인 요청이 있습니다. 정산을 완료한 후 삭제하세요."
+  "allocationDeletePending": "이 할당량에 정산 대기 중인 요청이 있습니다. 정산을 완료한 후 삭제하세요.",
+  "accountTokenExpired": "토큰 만료됨",
+  "accountCredentialRefreshing": "인증 정보 갱신 중",
+  "accountCredentialRefreshFailed": "인증 정보 갱신 실패",
+  "accountCredentialLastFailure": "최근 실패 시각: {{time}}",
+  "accountCredentialRetryAt": "재시도 가능 시각: {{time}}",
+  "accountCredentialRetryPending": "다음 갱신 시도를 기다리는 중입니다."
 }

@@ -44,6 +44,15 @@ export const accountSchema = z.object({
   expires_at: z.number().int().nonnegative(),
   created_at: z.number().int().nonnegative(),
   updated_at: z.number().int().nonnegative(),
+  credential_refresh: z
+    .object({
+      server_time: z.number().int().nonnegative(),
+      refreshing: z.boolean(),
+      failed: z.boolean(),
+      last_failure_at: z.number().int().nonnegative(),
+      retry_at: z.number().int().nonnegative(),
+    })
+    .optional(),
 })
 export type Account = z.infer<typeof accountSchema>
 const pageSchema = z.object({ accounts: z.array(accountSchema).max(100) })
@@ -82,6 +91,7 @@ const modelsSchema = z
   .max(512)
 export const accountOptions = {
   queryKey: ['accounts'],
+  refetchInterval: 15_000,
   queryFn: ({ signal }: { signal: AbortSignal }) =>
     request('/api/accounts', pageSchema, { signal }),
 }
