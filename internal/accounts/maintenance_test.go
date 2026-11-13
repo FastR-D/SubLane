@@ -8,6 +8,114 @@ import (
 	"time"
 )
 
+func TestScheduledRefreshMaintainsDisabledCodexWithoutAllowingUse(t *testing.T) {
+	ctx := context.Background()
+	s, account, now := refreshFixture(t, "codex", time.Hour)
+	s.ConfigureRefresh(ctx, CodexRefreshLead)
+	if _, err := s.SetEnabled(ctx, account.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	refresh := func(_ context.Context, c Credential) (Credential, error) {
+		calls++
+		c.AccessToken, c.RefreshToken, c.ExpiresAt = "synthetic-new", "synthetic-next", now.Add(10*24*time.Hour).Unix()
+		return c, nil
+	}
+	for _, service := range []*Service{s, New(s.db, s.vault)} {
+		service.now = s.now
+		service.ConfigureRefresh(ctx, CodexRefreshLead)
+		if err := service.RefreshDue(ctx, account.ID, refresh); err != nil {
+			t.Fatalf("disabled Codex maintenance failed: %v", err)
+		}
+		row, err := service.get(ctx, account.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		credential, err := service.decrypt(row)
+		if err != nil || row.Enabled || row.Status != "ready" || credential.AccessToken != "synthetic-new" || credential.RefreshAfter != now.Add(6*24*time.Hour).Unix() {
+			t.Fatalf("disabled rotation was not durably saved: enabled=%t status=%s err=%v", row.Enabled, row.Status, err)
+		}
+		if c, err := service.Prepare(ctx, account.ID, refresh); !errors.Is(err, ErrDisabled) || c.AccessToken != "" {
+			t.Fatalf("disabled account became usable: %v", err)
+		}
+		if c, err := service.RefreshAfterRejection(ctx, account.ID, "synthetic-new", refresh); !errors.Is(err, ErrDisabled) || c.AccessToken != "" {
+			t.Fatalf("unauthorized retry bypassed disablement: %v", err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("maintenance repeated a saved rotation or execution bypassed disablement: %d calls", calls)
+	}
+}
+
+func TestScheduledDisabledCodexRetainsBackoffAndReauthorization(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		failure error
+	}{
+		{"temporary", ErrRefresh},
+		{"permanent", ErrReauthorize},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			s, account, now := refreshFixture(t, "codex", time.Hour)
+			s.ConfigureRefresh(ctx, CodexRefreshLead)
+			if _, err := s.SetEnabled(ctx, account.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			failure := func(context.Context, Credential) (Credential, error) {
+				calls++
+				return Credential{}, tc.failure
+			}
+			for range 2 {
+				err := s.RefreshDue(ctx, account.ID, failure)
+				if tc.failure == ErrReauthorize && !errors.Is(err, ErrReauthorize) {
+					t.Fatalf("credential rejection was not retained: %v", err)
+				}
+			}
+			if calls != 1 {
+				t.Fatalf("maintenance bypassed failure protection: %d calls", calls)
+			}
+			*now = now.Add(31 * time.Second)
+			err := s.RefreshDue(ctx, account.ID, func(_ context.Context, c Credential) (Credential, error) {
+				calls++
+				c.AccessToken, c.ExpiresAt = "synthetic-recovered", now.Add(10*24*time.Hour).Unix()
+				return c, nil
+			})
+			row, readErr := s.Get(ctx, account.ID)
+			if readErr != nil || row.Enabled {
+				t.Fatalf("maintenance changed disabled state: %v", readErr)
+			}
+			if tc.failure == ErrReauthorize {
+				if !errors.Is(err, ErrReauthorize) || row.Status != "reauth_required" || calls != 1 {
+					t.Fatalf("maintenance retried permanent rejection: calls=%d err=%v", calls, err)
+				}
+			} else if err != nil || row.Status != "ready" || calls != 2 {
+				t.Fatalf("maintenance did not recover after backoff: calls=%d err=%v", calls, err)
+			}
+		})
+	}
+}
+
+func TestScheduledRefreshStillRejectsOtherDisabledProviders(t *testing.T) {
+	for _, provider := range []string{"claude", "antigravity", "xai"} {
+		t.Run(provider, func(t *testing.T) {
+			ctx := context.Background()
+			s, account, _ := refreshFixture(t, provider, time.Minute)
+			if _, err := s.SetEnabled(ctx, account.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			err := s.RefreshDue(ctx, account.ID, func(context.Context, Credential) (Credential, error) {
+				t.Fatal("disabled non-Codex account reached provider IO")
+				return Credential{}, nil
+			})
+			if !errors.Is(err, ErrDisabled) {
+				t.Fatalf("disabled non-Codex maintenance unexpectedly allowed: %v", err)
+			}
+		})
+	}
+}
+
 func TestCodexRefreshLeadAndShortLivedRotation(t *testing.T) {
 	for _, remaining := range []time.Duration{97 * time.Hour, 96 * time.Hour, time.Hour} {
 		t.Run(remaining.String(), func(t *testing.T) {

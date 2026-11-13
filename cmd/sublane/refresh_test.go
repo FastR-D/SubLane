@@ -61,6 +61,7 @@ func TestScheduledRefreshRunsWithoutTrafficAndSkipsIneligibleAccounts(t *testing
 	ctx := r.ctx
 	runtime := r.acquire(1)
 	s := runtime.accounts
+	var disabledID string
 	for _, name := range []string{"due", "fresh", "disabled", "reauthorize"} {
 		validity := time.Hour
 		if name == "fresh" {
@@ -71,6 +72,7 @@ func TestScheduledRefreshRunsWithoutTrafficAndSkipsIneligibleAccounts(t *testing
 			t.Fatal(err)
 		}
 		if name == "disabled" {
+			disabledID = a.ID
 			if _, err := s.SetEnabled(ctx, a.ID, false); err != nil {
 				t.Fatal(err)
 			}
@@ -83,16 +85,20 @@ func TestScheduledRefreshRunsWithoutTrafficAndSkipsIneligibleAccounts(t *testing
 	}
 	r.release(runtime)
 	cursor, err := r.refreshAccounts(ctx, "")
-	if err != nil || cursor != "" || calls.Load() != 1 {
+	if err != nil || cursor != "" || calls.Load() != 2 {
 		t.Fatalf("scheduled refresh: cursor=%q calls=%d err=%v", cursor, calls.Load(), err)
 	}
-	if _, err := r.refreshAccounts(ctx, ""); err != nil || calls.Load() != 1 {
+	disabled, err := s.Get(ctx, disabledID)
+	if err != nil || disabled.Enabled || disabled.Status != "ready" || disabled.ExpiresAt <= disabled.UpdatedAt {
+		t.Fatalf("scheduled rotation changed disabled account availability: %+v err=%v", disabled, err)
+	}
+	if _, err := r.refreshAccounts(ctx, ""); err != nil || calls.Load() != 2 {
 		t.Fatalf("maintenance repeated a successful rotation: %v", err)
 	}
 	// Recreating the workspace runtime must retain the rotation's durable refresh schedule.
 	r.now = func() time.Time { return time.Now().Add(runtimeIdleTimeout + time.Minute) }
 	r.reapIdle()
-	if _, err := r.refreshAccounts(ctx, ""); err != nil || calls.Load() != 1 {
+	if _, err := r.refreshAccounts(ctx, ""); err != nil || calls.Load() != 2 {
 		t.Fatalf("idle runtime recovery lost rotation: %v", err)
 	}
 }

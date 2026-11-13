@@ -26,7 +26,8 @@ func (s *Service) Prepare(ctx context.Context, id string, refresh func(context.C
 	return s.prepare(ctx, id, "", "request", refresh)
 }
 
-// RefreshDue shares the same durable owner as request-triggered refresh, without exposing credentials.
+// RefreshDue also maintains disabled Codex credentials without enabling them or exposing credentials.
+// It shares the same durable owner as request-triggered refresh.
 func (s *Service) RefreshDue(ctx context.Context, id string, refresh func(context.Context, Credential) (Credential, error)) error {
 	_, err := s.prepare(ctx, id, "", "scheduled", refresh)
 	return err
@@ -58,7 +59,8 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken, trigger string
 	if !s.ProviderEnabled(row.Provider) {
 		return Credential{}, ErrProviderDisabled
 	}
-	if !row.Enabled {
+	// Disabling an account blocks execution, while scheduled Codex maintenance preserves its credentials.
+	if !row.Enabled && (trigger != "scheduled" || row.Provider != "codex") {
 		return Credential{}, ErrDisabled
 	}
 	if row.Status == "reauth_required" {

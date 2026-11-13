@@ -193,7 +193,7 @@ func (q *Queries) ListAccounts(ctx context.Context, tenantID int64) ([]ListAccou
 
 const listDueCodexRefresh = `-- name: ListDueCodexRefresh :many
 SELECT a.id,a.tenant_id FROM accounts a JOIN tenants t ON t.id=a.tenant_id
-WHERE t.status='active' AND a.provider='codex' AND a.enabled=1 AND a.status!='reauth_required'
+WHERE t.status='active' AND a.provider='codex' AND a.status!='reauth_required'
 AND a.expires_at<=?1 AND a.id>?2
 ORDER BY a.id LIMIT 100
 `
