@@ -17,9 +17,11 @@ func (e *RefreshError) Error() string { return ErrRefresh.Error() }
 func (e *RefreshError) Unwrap() error { return ErrRefresh }
 
 type refreshState struct {
-	failures int
-	retryAt  time.Time
-	fallback bool
+	failures      int
+	retryAt       time.Time
+	fallback      bool
+	refreshing    bool
+	lastFailureAt int64
 }
 
 func (s *Service) Prepare(ctx context.Context, id string, refresh func(context.Context, Credential) (Credential, error)) (Credential, error) {
@@ -136,6 +138,8 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken, trigger string
 		return Credential{}, err
 	}
 	defer finish()
+	s.startRefresh(id)
+	defer s.finishRefresh(id)
 	// Refresh and administrator writes share this owner. Publish rotated credentials only after persistence.
 	// Once rotation starts, a disconnected caller must not discard a consumed refresh token's replacement.
 	// Keep provider IO and persistence synchronous and bounded under the same independent context.
@@ -187,6 +191,7 @@ func (s *Service) prepare(ctx context.Context, id, rejectedToken, trigger string
 	if credential.Rejected && state.failures > 0 {
 		// A token endpoint success alone must not reset consecutive business-401 backoff.
 		state.retryAt, state.fallback = time.Time{}, false
+		state.lastFailureAt = 0
 		s.refreshMu.Lock()
 		s.refreshes[id] = state
 		s.refreshMu.Unlock()
@@ -225,6 +230,7 @@ func (s *Service) deferRefresh(id string, err error, fallback bool) refreshState
 	}
 	state.failures = min(4, state.failures+1)
 	state.retryAt = s.now().Add(delay)
+	state.lastFailureAt = s.now().Unix()
 	// A returned rotation that fails validation or persistence must not turn into old-token fallback on the next read.
 	state.fallback = fallback
 	if s.refreshes == nil {

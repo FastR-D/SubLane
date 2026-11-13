@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,7 +62,8 @@ func TestAccountManagementIsAdministratorOnlyAndNeverReturnsTokens(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := New(Options{Auth: identity, Accounts: accounts.New(db, cipher), Ping: db.PingContext})
+	accountService := accounts.New(db, cipher)
+	h := New(Options{Auth: identity, Accounts: accountService, Ping: db.PingContext})
 	origin := "http://example.test"
 	setup := request(h, "POST", "/api/auth/setup", origin, map[string]string{"username": "owner-test", "password": "owner pass 42", "workspace_name": "Synthetic workspace"}, nil)
 	owner := setup.Result().Cookies()[0]
@@ -92,6 +94,21 @@ func TestAccountManagementIsAdministratorOnlyAndNeverReturnsTokens(t *testing.T)
 	}
 	if result := request(h, "PATCH", "/api/accounts/"+account.ID, origin, map[string]bool{"enabled": false}, owner); result.Code != 200 {
 		t.Fatal("cannot disable")
+	}
+	if err := accountService.RefreshDue(ctx, account.ID, func(context.Context, accounts.Credential) (accounts.Credential, error) {
+		return accounts.Credential{}, errors.New("synthetic-secret-upstream-body")
+	}); !errors.Is(err, accounts.ErrRefresh) {
+		t.Fatal("expected temporary refresh failure", err)
+	}
+	listed = request(h, "GET", "/api/accounts", "", nil, owner)
+	var page struct {
+		Accounts []accounts.Account `json:"accounts"`
+	}
+	if json.Unmarshal(listed.Body.Bytes(), &page) != nil || len(page.Accounts) != 1 || page.Accounts[0].Enabled || page.Accounts[0].CredentialRefresh == nil || !page.Accounts[0].CredentialRefresh.Failed || strings.Contains(listed.Body.String(), "synthetic-secret") {
+		t.Fatal("missing safe disabled-account refresh diagnostics")
+	}
+	if result := request(h, "GET", "/api/accounts", "", nil, member); result.Code != 403 {
+		t.Fatal("member read credential diagnostics")
 	}
 	if result := request(h, "DELETE", "/api/accounts/"+account.ID, origin, map[string]string{}, member); result.Code != 403 {
 		t.Fatal("member deleted account")

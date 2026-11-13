@@ -32,22 +32,23 @@ var (
 )
 
 type Account struct {
-	BaseURL        string `json:"base_url,omitempty"`
-	APIPlatform    string `json:"api_platform,omitempty"`
-	APIProtocol    string `json:"api_protocol,omitempty"`
-	GroupCount     *int64 `json:"group_count,omitempty"`
-	ProxyID        string `json:"proxy_id,omitempty"`
-	ID             string `json:"id"`
-	Provider       string `json:"provider"`
-	Name           string `json:"name"`
-	Email          string `json:"email"`
-	Plan           string `json:"plan"`
-	Enabled        bool   `json:"enabled"`
-	Status         string `json:"status"`
-	ExpiresAt      int64  `json:"expires_at"`
-	CreatedAt      int64  `json:"created_at"`
-	UpdatedAt      int64  `json:"updated_at"`
-	MaxConcurrency int64  `json:"max_concurrency"`
+	CredentialRefresh *CredentialRefreshStatus `json:"credential_refresh,omitempty"`
+	BaseURL           string                   `json:"base_url,omitempty"`
+	APIPlatform       string                   `json:"api_platform,omitempty"`
+	APIProtocol       string                   `json:"api_protocol,omitempty"`
+	GroupCount        *int64                   `json:"group_count,omitempty"`
+	ProxyID           string                   `json:"proxy_id,omitempty"`
+	ID                string                   `json:"id"`
+	Provider          string                   `json:"provider"`
+	Name              string                   `json:"name"`
+	Email             string                   `json:"email"`
+	Plan              string                   `json:"plan"`
+	Enabled           bool                     `json:"enabled"`
+	Status            string                   `json:"status"`
+	ExpiresAt         int64                    `json:"expires_at"`
+	CreatedAt         int64                    `json:"created_at"`
+	UpdatedAt         int64                    `json:"updated_at"`
+	MaxConcurrency    int64                    `json:"max_concurrency"`
 }
 
 type Service struct {
@@ -106,7 +107,7 @@ func (s *Service) List(ctx context.Context) ([]Account, error) {
 			}
 			account = apiMetadata(account, credential)
 		}
-		result = append(result, account)
+		result = append(result, s.withRefreshStatus(account))
 	}
 	return result, nil
 }
@@ -225,7 +226,7 @@ func (s *Service) save(ctx context.Context, name string, credential Credential, 
 		if credential.Kind() == "openai" {
 			result = apiMetadata(result, credential)
 		}
-		return result, nil
+		return s.withRefreshStatus(result), nil
 	}
 	credential, _, err = prepareClaudeIdentity(credential, "")
 	if err != nil {
@@ -284,7 +285,7 @@ func (s *Service) save(ctx context.Context, name string, credential Credential, 
 	if credential.Kind() == "openai" {
 		result = apiMetadata(result, credential)
 	}
-	return result, nil
+	return s.withRefreshStatus(result), nil
 }
 
 func (s *Service) SetEnabled(ctx context.Context, id string, enabled bool) (Account, error) {
@@ -402,7 +403,7 @@ func (s *Service) accountMetadata(row db.Account) (Account, error) {
 		}
 		result = apiMetadata(result, credential)
 	}
-	return result, nil
+	return s.withRefreshStatus(result), nil
 }
 
 func NormalizeName(name string) (string, error) {
